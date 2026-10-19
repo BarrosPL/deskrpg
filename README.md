@@ -179,6 +179,68 @@ For production, always set a real `JWT_SECRET`.
 Gateway URL and token are not environment variables. They are registered inside the app on the
 `My Gateways` page and then attached to a channel from `Settings -> Channel Settings -> AI Connection`.
 
+## Updating DeskRPG
+
+Update on the computer or server that runs DeskRPG. If you only visit an office hosted by someone else, ask its administrator to update it. Choose the method you originally used to install it. Back up your database, uploads, and configuration before updating; schedule the restart when no conversations or meetings are running.
+
+### Hostinger Docker Manager
+
+1. Open **hPanel → VPS → Docker Manager**.
+2. On your DeskRPG project, choose **⋮ → Update**.
+3. Wait for deployment to finish, then refresh your DeskRPG browser tab.
+
+If `DESKRPG_IMAGE` is pinned to an older release, open **Manage → Environment**, set it to `ghcr.io/dandacompany/deskrpg:latest` (or the desired [release tag](https://github.com/dandacompany/deskrpg/releases)), and choose **Save and deploy**.
+
+For an older installation, check **Manage → .yaml editor** for `plugin-pin`. If it is missing, follow the [one-time compose replacement](deploy/hostinger/README.md#set-up-before-this-change-replace-the-compose-once). After that, Update also installs the plugin version matched to DeskRPG and restarts Hermes when the pin changes. Update preserves the existing data volumes and environment settings. **Do not delete the project to update it.**
+
+### npm / npx
+
+For a global npm installation:
+
+```bash
+deskrpg stop
+deskrpg update
+deskrpg start
+```
+
+`deskrpg update` installs the latest published package; it does not restart the running server. If it fails, run `npm install -g deskrpg@latest`, then start DeskRPG again. Check the installed version with `deskrpg version`.
+
+If you use `npx`, stop the existing server first (`npx deskrpg stop`, or Ctrl+C in its terminal), then run:
+
+```bash
+npx deskrpg@latest start
+```
+
+The default runtime data stays in `~/.deskrpg/`. Keep that directory (or your custom data location); updating does not require another `init` or an uninstall. If a service manager starts DeskRPG, restart it through that manager instead.
+
+### Docker Compose
+
+In your installation folder, pull the new images and recreate the services:
+
+```bash
+docker compose pull
+docker compose up -d
+```
+
+Use the same `--env-file` and `-f` options you used at installation **on both commands**. For example, with the SQLite setup:
+
+```bash
+docker compose --env-file .env.lite -f docker/docker-compose.lite.yml pull
+docker compose --env-file .env.lite -f docker/docker-compose.lite.yml up -d
+```
+
+If `DESKRPG_IMAGE` is pinned, change it to the desired release tag or `latest` first. Keep your existing environment files and volumes; do not regenerate secrets or run `docker compose down -v` to update. Pulling images does not replace your compose file.
+
+With the local Docker + Hermes setup, also recreate Hermes to apply the plugin update:
+
+```bash
+docker compose --env-file .env.hermes -f docker/docker-compose.hermes.yml up -d --force-recreate hermes
+```
+
+### Check after updating
+
+Refresh the browser and open **My Gateways → Test connection**. DeskRPG and its Hermes plugin are separate components: if you run Hermes independently, follow [Upgrading an installed plugin](#upgrading-an-installed-plugin) below and restart the gateway. This release's original-file attachments require plugin **0.32.0**.
+
 ## Hermes Connection
 
 AI NPCs, task automation, and AI meetings all run through a Hermes gateway.
@@ -234,7 +296,7 @@ hermes plugins enable deskrpg
 succeeded. DeskRPG shows an equivalent one-line command in the board and schedule screens when it
 detects the plugin is missing or out of date.
 
-**Upgrading an installed plugin**
+### Upgrading an installed plugin
 
 Running `install` again over an existing plugin fails with "already exists", and the old version
 keeps running. Replace it in this order:
@@ -254,7 +316,7 @@ hermes gateway restart
 - Run these in the root (default) Hermes home. A plugin installed with `-p <profile>` does not attach
   to the root listener that DeskRPG talks to.
 
-Check the result with `hermes plugins list`: `deskrpg` should be `enabled` at version 0.30.x.
+Check the result with `hermes plugins list`: `deskrpg` should be `enabled` at version 0.32.0 for this release.
 
 **Approval policies work on upstream Hermes.** From plugin 0.27.0 the plugin enforces card approval (capability `review_hooks_v1`) with documented Hermes hooks and a plugin-owned store, without changing Hermes core: an implementer cannot finish its own card, a card waiting for a person sits in `review` with no assignee, and the reviewer never approves work it did itself. Gateways without the capability create cards without a policy, and the board says they complete without approval. On upstream's package-manager install, set `HERMES_BIN` to the Hermes launcher so kanban workers can start (the setup wizard does this on Linux, and the gateway page shows the command otherwise). If you ran the earlier Dante Labs compatibility patch, follow the plugin's [steps for moving off the patched core](https://github.com/dandacompany/deskrpg-hermes-plugin#moving-an-install-off-the-patched-core).
 

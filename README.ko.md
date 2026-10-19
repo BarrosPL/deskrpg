@@ -179,6 +179,68 @@ docker compose --env-file .env.hermes -f docker/docker-compose.hermes.yml up -d
 게이트웨이 URL과 토큰은 환경 변수가 아닙니다. 앱의 `내 게이트웨이` 페이지에서 등록한 뒤,
 `설정 -> 채널 설정 -> AI 연결`에서 채널에 연결합니다.
 
+## DeskRPG 업데이트
+
+DeskRPG를 실행하는 컴퓨터나 서버에서 업데이트합니다. 다른 사람이 운영하는 사무실에 접속해서 사용 중이라면 관리자에게 요청하세요. 처음 설치한 방식에 맞춰 아래 절차를 따릅니다. 업데이트 전에는 데이터베이스·업로드 파일·설정을 백업하고, 대화나 회의가 진행되지 않을 때 재시작하세요.
+
+### Hostinger Docker Manager
+
+1. **hPanel → VPS → Docker Manager**를 엽니다.
+2. DeskRPG 프로젝트에서 **⋮ → Update**를 선택합니다.
+3. 배포가 끝나면 DeskRPG 브라우저 화면을 새로고침합니다.
+
+`DESKRPG_IMAGE`를 이전 버전으로 고정했다면 **Manage → Environment**에서 `ghcr.io/dandacompany/deskrpg:latest` 또는 원하는 [릴리스 태그](https://github.com/dandacompany/deskrpg/releases)로 바꾸고 **Save and deploy**를 누릅니다.
+
+오래전에 설치했다면 **Manage → .yaml editor**에서 `plugin-pin`을 검색하세요. 없다면 [compose 파일을 한 번 교체하는 절차](deploy/hostinger/README.md#set-up-before-this-change-replace-the-compose-once)를 따릅니다. 이후에는 Update가 DeskRPG에 맞는 플러그인도 설치하고, 지정된 플러그인 버전이 바뀌면 Hermes를 재시작합니다. 기존 데이터 볼륨과 환경변수 설정은 유지됩니다. **업데이트를 위해 프로젝트를 삭제하지 마세요.**
+
+### npm / npx
+
+npm으로 전역 설치했다면 다음 순서로 실행합니다.
+
+```bash
+deskrpg stop
+deskrpg update
+deskrpg start
+```
+
+`deskrpg update`는 최신 배포 패키지를 설치하며, 실행 중인 서버를 자동으로 재시작하지는 않습니다. 실패하면 `npm install -g deskrpg@latest`를 실행한 뒤 DeskRPG를 다시 시작하세요. 설치된 버전은 `deskrpg version`으로 확인합니다.
+
+`npx`로 사용했다면 기존 서버를 먼저 종료하고(`npx deskrpg stop` 또는 실행 중인 터미널에서 Ctrl+C), 다음 명령으로 실행합니다.
+
+```bash
+npx deskrpg@latest start
+```
+
+기본 실행 데이터는 `~/.deskrpg/`에 그대로 남습니다. 이 폴더 또는 직접 지정한 데이터 경로를 유지하세요. 업데이트를 위해 `init`을 다시 실행하거나 제거할 필요는 없습니다. 서비스 관리자로 실행 중이라면 해당 관리자를 통해 재시작하세요.
+
+### Docker Compose
+
+설치한 폴더에서 새 이미지를 받고 서비스를 다시 띄웁니다.
+
+```bash
+docker compose pull
+docker compose up -d
+```
+
+처음 설치할 때 사용한 `--env-file`과 `-f` 옵션을 **두 명령 모두에 동일하게** 붙입니다. 예를 들어 SQLite 구성은 다음과 같습니다.
+
+```bash
+docker compose --env-file .env.lite -f docker/docker-compose.lite.yml pull
+docker compose --env-file .env.lite -f docker/docker-compose.lite.yml up -d
+```
+
+`DESKRPG_IMAGE`를 특정 버전으로 고정했다면 원하는 릴리스 태그나 `latest`로 먼저 변경하세요. 기존 환경변수 파일과 볼륨은 유지합니다. 업데이트를 위해 비밀키를 다시 생성하거나 `docker compose down -v`를 실행하지 마세요. 이미지를 받는 것만으로 compose 파일 자체가 교체되지는 않습니다.
+
+내 컴퓨터의 Docker + Hermes 구성을 사용한다면, 플러그인 업데이트를 적용하도록 Hermes도 다시 생성합니다.
+
+```bash
+docker compose --env-file .env.hermes -f docker/docker-compose.hermes.yml up -d --force-recreate hermes
+```
+
+### 업데이트 후 확인
+
+브라우저를 새로고침하고 **내 게이트웨이 → 연결 테스트**를 실행합니다. DeskRPG 앱과 Hermes 플러그인은 별도 구성 요소입니다. Hermes를 독립적으로 운영한다면 아래 [설치된 플러그인 업그레이드](#설치된-플러그인-업그레이드) 절차를 따르고 게이트웨이를 재시작하세요. 이번 릴리스의 원본 파일 첨부 기능은 플러그인 **0.32.0**이 필요합니다.
+
 ## Hermes 연결
 
 AI NPC, 태스크 자동화, AI 회의는 모두 Hermes 게이트웨이를 통해 동작합니다.
@@ -233,7 +295,7 @@ hermes plugins enable deskrpg
 `enable` 은 선택이 아닙니다. 설치만 하고 건너뛰면 모든 플러그인 라우트가 404를 냅니다.
 DeskRPG는 플러그인이 없거나 낡았다고 판단하면 보드·일정 화면에 같은 일을 하는 한 줄 명령을 보여줍니다.
 
-**설치된 플러그인 업그레이드**
+### 설치된 플러그인 업그레이드
 
 이미 설치된 플러그인 위에 `install` 을 다시 실행하면 "already exists" 로 실패하고 옛 버전이
 그대로 돌아갑니다. 아래 순서로 교체합니다.
@@ -253,7 +315,7 @@ hermes gateway restart
 - 루트(default) Hermes 홈에서 실행하세요. `-p <프로필>` 로 설치한 플러그인은 DeskRPG 가 호출하는
   루트 리스너에 붙지 않습니다.
 
-`hermes plugins list` 로 확인합니다. `deskrpg` 가 `enabled`, 버전 0.30.x 로 보여야 합니다.
+`hermes plugins list` 로 확인합니다. `deskrpg` 가 `enabled`, 이번 릴리스 기준 버전 0.32.0으로 보여야 합니다.
 
 **승인 정책은 본가 Hermes 에서 동작합니다.** 플러그인 0.27.0 부터 Hermes core 를 바꾸지 않고, 문서화된 Hermes 훅과 플러그인 전용 저장소로 카드 승인을 지킵니다(`review_hooks_v1`). 구현자는 자기 카드를 스스로 끝낼 수 없고, 사람 승인을 기다리는 카드는 담당 없이 `review` 에 머물며, 검토자는 자기가 한 작업을 승인하지 않습니다. 이 기능이 없는 게이트웨이는 정책 없이 카드를 만들고, 보드가 승인 없이 완료된다고 알립니다. 본가의 패키지 매니저 설치에서는 칸반 워커가 뜨도록 `HERMES_BIN` 을 Hermes 실행 파일로 지정하세요(Linux 에서는 설치 마법사가 해 주고, 그 밖에는 게이트웨이 화면이 명령을 보여 줍니다). 예전 단테랩스 호환 패치를 쓰셨다면 플러그인의 [패치 core 에서 옮기는 절차](https://github.com/dandacompany/deskrpg-hermes-plugin#moving-an-install-off-the-patched-core)를 따르세요.
 
