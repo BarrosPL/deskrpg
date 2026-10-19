@@ -1,3 +1,4 @@
+import { retireAttachmentContexts } from "@/lib/conversation-attachments/repository";
 import { db, jsonForDb, isPostgres } from "@/db";
 import { characters, channels } from "@/db";
 import { NextRequest, NextResponse } from "next/server";
@@ -157,6 +158,11 @@ export async function DELETE(req: NextRequest, { params }: { params: Promise<{ i
     }
 
     // Delete channels owned by this user (CASCADE handles npcs, members, chat_messages)
+    const ownedChannels = await db
+      .select({ id: channels.id })
+      .from(channels)
+      .where(eq(channels.ownerId, userId));
+    for (const channel of ownedChannels) await retireAttachmentContexts({ channelId: channel.id });
     await db.delete(channels).where(eq(channels.ownerId, userId));
 
     // Delete the character

@@ -1,3 +1,4 @@
+import { retireAttachmentContexts } from "@/lib/conversation-attachments/repository";
 import {
   channelRowRevisionExpression,
   mapContentRevision,
@@ -427,6 +428,7 @@ export async function DELETE(req: NextRequest, { params }: { params: Promise<{ i
     }
 
     // CASCADE will delete channel_members, npcs, chat_messages
+    await retireAttachmentContexts({ channelId: id });
     await db.delete(channels).where(eq(channels.id, id));
 
     return NextResponse.json({ success: true });

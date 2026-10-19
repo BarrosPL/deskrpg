@@ -1,3 +1,4 @@
+import { canAccessActiveMeetingAttachments } from "./meeting-access-registry";
 import { and, eq } from "drizzle-orm";
 import { db, npcs } from "@/db";
 import { requireChannelMember } from "@/lib/cron-access";
@@ -46,7 +47,7 @@ async function requireSource(
       .limit(1);
     if (!npc) throw new AttachmentServiceError(404, "attachment_not_found");
     if (ctx && ctx.ownerUserId !== userId) throw new AttachmentServiceError(403, "forbidden");
-  } else if (conversation.kind === "room" || ctx?.roomId) {
+  } else if (conversation.kind === "room" || (ctx?.roomId && ctx.lifecycle === "active")) {
     const room = await getRoom(conversation.kind === "room" ? conversation.id : ctx!.roomId!);
     if (!room || room.channelId !== channelId)
       throw new AttachmentServiceError(404, "attachment_not_found");
@@ -128,6 +129,17 @@ export async function resolveAttachmentAccess(
 ): Promise<AttachmentAccess> {
   const actor = await requireMember(channelId, userId);
   const context = await ensureConversationContext({ userId: actor, channelId, conversation });
+  if (
+    context.kind === "meeting" &&
+    context.lifecycle === "active" &&
+    !(await canAccessActiveMeetingAttachments({
+      userId: actor,
+      channelId,
+      contextId: context.id,
+      action,
+    }))
+  )
+    throw new AttachmentServiceError(403, "forbidden");
   if (action !== "read" && context.lifecycle !== "active")
     throw new AttachmentServiceError(409, "attachment_conflict");
   const binding = await getChannelGatewayBinding(channelId);

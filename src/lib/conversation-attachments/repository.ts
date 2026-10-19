@@ -103,7 +103,16 @@ export async function createRequest(input: {
       updatedAt: now,
     })
     .onConflictDoNothing();
-  return (await getRequest(input.id))!;
+  const row = (await getRequest(input.id))!;
+  if (
+    row.contextId !== input.contextId ||
+    row.senderId !== input.senderId ||
+    row.revision !== input.revision ||
+    row.targetSnapshotJson !== JSON.stringify(input.targets) ||
+    row.selectedFileIdsJson !== JSON.stringify(input.fileIds)
+  )
+    throw new Error("attachment_conflict");
+  return row;
 }
 export async function transitionRequest(
   id: string,
@@ -154,7 +163,10 @@ export async function hasActiveRequest(contextId: string) {
   );
 }
 export async function markContextDeleted(id: string) {
-  await updateContext(id, { lifecycle: "deleted" });
+  await db
+    .update(contexts)
+    .set({ lifecycle: "deleted", scopeKey: `deleted:${id}` })
+    .where(eq(contexts.id, id));
   for (const file of await listLinks(id))
     if (file.status !== "deleted") await updateLink(file.id, { status: "delete_pending" });
 }
@@ -170,4 +182,37 @@ export async function findContextByMinutes(minutesId: string) {
       await db.select().from(contexts).where(eq(contexts.meetingMinutesId, minutesId)).limit(1)
     )[0] ?? null
   );
+}
+
+export async function resetDmAttachmentContext(userId: string, channelId: string, npcId: string) {
+  const rows = await db
+    .select()
+    .from(contexts)
+    .where(
+      and(
+        eq(contexts.kind, "dm"),
+        eq(contexts.sourceChannelId, channelId),
+        eq(contexts.ownerUserId, userId),
+        eq(contexts.npcId, npcId),
+      ),
+    );
+  for (const row of rows) await markContextDeleted(row.id);
+}
+export async function retireAttachmentContexts(source: {
+  channelId?: string;
+  gatewayId?: string;
+  roomId?: string;
+  minutesId?: string;
+}) {
+  const conditions = [];
+  if (source.channelId) conditions.push(eq(contexts.sourceChannelId, source.channelId));
+  if (source.gatewayId) conditions.push(eq(contexts.sourceGatewayId, source.gatewayId));
+  if (source.roomId) conditions.push(eq(contexts.roomId, source.roomId));
+  if (source.minutesId) conditions.push(eq(contexts.meetingMinutesId, source.minutesId));
+  if (!conditions.length) throw new Error("attachment_invalid_selection");
+  for (const row of await db
+    .select()
+    .from(contexts)
+    .where(and(...conditions)))
+    await markContextDeleted(row.id);
 }

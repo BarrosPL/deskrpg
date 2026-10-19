@@ -1,3 +1,5 @@
+import { readBoundedFormData } from "./upload-body";
+import { validateAttachmentSelection } from "./policy";
 import { NextRequest, NextResponse } from "next/server";
 import { getUserId } from "@/lib/internal-rpc";
 import { streamProxyResponse } from "@/lib/hermes/stream-proxy";
@@ -9,7 +11,7 @@ import type { ConversationRef } from "./types";
 export async function attachmentRoute(
   req: NextRequest,
   channelId: string,
-  operation: "list" | "upload" | "delete" | "content" | "request" | "retry" | "cancel",
+  operation: "list" | "upload" | "delete" | "content" | "request" | "retry" | "cancel" | "exclude",
   id?: string,
 ) {
   try {
@@ -23,17 +25,14 @@ export async function attachmentRoute(
         ? "upload"
         : operation === "delete"
           ? "delete"
-          : ["retry", "cancel"].includes(operation)
+          : ["retry", "cancel", "exclude"].includes(operation)
             ? "prepare"
             : "read";
     const access = await resolveAttachmentAccess(getUserId(req), channelId, conversation, action);
     if (operation === "list")
       return NextResponse.json({ conversation, files: await listAttachments(access) });
     if (operation === "upload") {
-      const length = Number(req.headers.get("content-length") ?? 0);
-      if (length > 5 * 1024 * 1024 + 64 * 1024)
-        throw new AttachmentServiceError(413, "attachment_too_large");
-      const form = await req.formData();
+      const form = await readBoundedFormData(req);
       const file = form.get("file");
       const requestId = form.get("requestId");
       if (
@@ -67,7 +66,19 @@ export async function attachmentRoute(
       throw new AttachmentServiceError(404, "attachment_not_found");
     if (operation === "request")
       return NextResponse.json({ requestId: request.id, state: request.status });
-    return NextResponse.json(await invokeAttachmentRequestHandler(operation, access, id));
+    let fileIds: string[] = [];
+    if (operation === "exclude") {
+      const body = await req.json().catch(() => null);
+      if (
+        !body ||
+        !Array.isArray(body.fileIds) ||
+        body.fileIds.some((id: unknown) => typeof id !== "string") ||
+        validateAttachmentSelection(body.fileIds)
+      )
+        throw new AttachmentServiceError(400, "attachment_invalid_selection");
+      fileIds = body.fileIds;
+    }
+    return NextResponse.json(await invokeAttachmentRequestHandler(operation, access, id, fileIds));
   } catch (error) {
     const e =
       error instanceof AttachmentServiceError

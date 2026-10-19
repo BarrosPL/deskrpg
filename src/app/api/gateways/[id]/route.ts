@@ -1,3 +1,4 @@
+import { retireAttachmentContexts } from "@/lib/conversation-attachments/repository";
 import { rotateGatewayToken } from "@/lib/gateway-token-rotation";
 import { isManagedSshUrl } from "@/lib/hermes/setup/transport-id";
 import { NextRequest, NextResponse } from "next/server";
@@ -119,6 +120,7 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
       });
 
   if (updated.id !== owned.id) {
+    await retireAttachmentContexts({ gatewayId: owned.id });
     await db.delete(gatewayResources).where(eq(gatewayResources.id, owned.id));
   }
 
@@ -165,6 +167,7 @@ export async function DELETE(req: NextRequest, { params }: { params: Promise<{ i
     );
   }
 
+  await retireAttachmentContexts({ gatewayId: id });
   await db.delete(gatewayResources).where(eq(gatewayResources.id, id));
   return NextResponse.json({ ok: true });
 }

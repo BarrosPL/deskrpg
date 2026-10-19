@@ -124,3 +124,52 @@ test("offline cleanup retains tombstone ledger and linked originals", async () =
   assert.equal((await repo.getLink("orphan"))?.status, "delete_pending");
   assert.equal((await repo.getLink("linked"))?.status, "stored");
 });
+test("request id cannot be reused for a different sender or selected files", async () => {
+  const c = await repo.createContext({
+    kind: "dm",
+    scopeKey: "conflict",
+    sourceChannelId: "ch",
+    sourceGatewayId: "gw",
+    ownerUserId: "u",
+  });
+  await repo.createRequest({
+    id: "same",
+    contextId: c.id,
+    senderId: "u",
+    revision: 0,
+    targets: [],
+    fileIds: ["a"],
+  });
+  await assert.rejects(
+    repo.createRequest({
+      id: "same",
+      contextId: c.id,
+      senderId: "u",
+      revision: 0,
+      targets: [],
+      fileIds: ["b"],
+    }),
+    /attachment_conflict/,
+  );
+});
+test("DM reset retires metadata and frees the scope for a new generation", async () => {
+  const c = await repo.createContext({
+    kind: "dm",
+    scopeKey: "generation",
+    sourceChannelId: "channel",
+    sourceGatewayId: "gw",
+    ownerUserId: "u",
+    npcId: "npc",
+  });
+  await repo.resetDmAttachmentContext("u", "channel", "npc");
+  assert.equal((await repo.getContext(c.id))?.lifecycle, "deleted");
+  assert.equal(await repo.findContext("generation"), null);
+});
+test("active meeting authorizer must explicitly allow the actor", async () => {
+  const { registerMeetingAttachmentAccess, canAccessActiveMeetingAttachments } =
+    await import("./meeting-access-registry");
+  registerMeetingAttachmentAccess(({ userId }) => userId === "participant");
+  const input = { channelId: "c", contextId: "meeting", action: "upload" };
+  assert.equal(await canAccessActiveMeetingAttachments({ ...input, userId: "stranger" }), false);
+  assert.equal(await canAccessActiveMeetingAttachments({ ...input, userId: "participant" }), true);
+});

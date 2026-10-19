@@ -1,7 +1,4 @@
-import {
-  findContextByMinutes,
-  externalConversation,
-} from "@/lib/conversation-attachments/repository";
+import { findContextByMinutes, externalConversation, retireAttachmentContexts } from "@/lib/conversation-attachments/repository";
 import { db } from "@/db";
 import { meetingMinutes, channelMembers, channels } from "@/db";
 import { NextRequest, NextResponse } from "next/server";
@@ -122,6 +119,7 @@ export async function DELETE(req: NextRequest, { params }: { params: Promise<{ i
       );
     }
 
+    await retireAttachmentContexts({ minutesId: id });
     await db.delete(meetingMinutes).where(eq(meetingMinutes.id, id));
     return NextResponse.json({ ok: true });
   } catch (err) {

@@ -1,46 +1,51 @@
-CREATE TABLE IF NOT EXISTS conversation_attachment_contexts (
-  id TEXT PRIMARY KEY NOT NULL,
-  kind TEXT NOT NULL,
-  scope_key TEXT NOT NULL,
-  channel_id UUID REFERENCES channels(id) ON DELETE SET NULL,
-  gateway_id UUID REFERENCES gateway_resources(id) ON DELETE SET NULL,
-  source_channel_id TEXT NOT NULL,
-  source_gateway_id TEXT NOT NULL,
-  owner_user_id TEXT NOT NULL,
-  npc_id TEXT,
-  room_id TEXT,
-  meeting_minutes_id TEXT,
-  revision INTEGER NOT NULL,
-  lifecycle TEXT NOT NULL,
-  created_at TEXT NOT NULL,
-  UNIQUE(scope_key)
+CREATE TABLE "conversation_attachment_contexts" (
+	"id" text PRIMARY KEY NOT NULL,
+	"kind" text NOT NULL,
+	"scope_key" text NOT NULL,
+	"channel_id" uuid,
+	"gateway_id" uuid,
+	"source_channel_id" text NOT NULL,
+	"source_gateway_id" text NOT NULL,
+	"owner_user_id" text NOT NULL,
+	"npc_id" text,
+	"room_id" text,
+	"meeting_minutes_id" text,
+	"revision" integer NOT NULL,
+	"lifecycle" text NOT NULL,
+	"created_at" text NOT NULL,
+	CONSTRAINT "conversation_attachment_contexts_scope_unique" UNIQUE("scope_key")
 );
-CREATE TABLE IF NOT EXISTS conversation_attachment_links (
-  id TEXT PRIMARY KEY NOT NULL,
-  context_id TEXT NOT NULL,
-  plugin_file_id TEXT NOT NULL,
-  uploader_id TEXT NOT NULL,
-  message_id TEXT,
-  name TEXT NOT NULL,
-  mime_type TEXT NOT NULL,
-  bytes INTEGER NOT NULL,
-  sha256 TEXT NOT NULL,
-  status TEXT NOT NULL,
-  request_id TEXT NOT NULL,
-  error_code TEXT,
-  created_at TEXT NOT NULL,
-  updated_at TEXT NOT NULL,
-  UNIQUE(context_id,request_id)
+--> statement-breakpoint
+CREATE TABLE "conversation_attachment_links" (
+	"id" text PRIMARY KEY NOT NULL,
+	"context_id" text NOT NULL,
+	"plugin_file_id" text NOT NULL,
+	"uploader_id" text NOT NULL,
+	"message_id" text,
+	"name" text NOT NULL,
+	"mime_type" text NOT NULL,
+	"bytes" integer NOT NULL,
+	"sha256" text NOT NULL,
+	"status" text NOT NULL,
+	"request_id" text NOT NULL,
+	"error_code" text,
+	"created_at" text NOT NULL,
+	"updated_at" text NOT NULL,
+	CONSTRAINT "conversation_attachment_links_scope_unique" UNIQUE("context_id","request_id")
 );
-CREATE TABLE IF NOT EXISTS conversation_attachment_requests (
-  id TEXT PRIMARY KEY NOT NULL,
-  context_id TEXT NOT NULL,
-  sender_id TEXT NOT NULL,
-  revision INTEGER NOT NULL,
-  target_snapshot_json TEXT NOT NULL,
-  selected_file_ids_json TEXT NOT NULL,
-  status TEXT NOT NULL,
-  lease_state_json TEXT NOT NULL,
-  created_at TEXT NOT NULL,
-  updated_at TEXT NOT NULL
+--> statement-breakpoint
+CREATE TABLE "conversation_attachment_requests" (
+	"id" text PRIMARY KEY NOT NULL,
+	"context_id" text NOT NULL,
+	"sender_id" text NOT NULL,
+	"revision" integer NOT NULL,
+	"target_snapshot_json" text NOT NULL,
+	"selected_file_ids_json" text NOT NULL,
+	"status" text NOT NULL,
+	"lease_state_json" text NOT NULL,
+	"created_at" text NOT NULL,
+	"updated_at" text NOT NULL
 );
+--> statement-breakpoint
+ALTER TABLE "conversation_attachment_contexts" ADD CONSTRAINT "conversation_attachment_contexts_channel_id_channels_id_fk" FOREIGN KEY ("channel_id") REFERENCES "public"."channels"("id") ON DELETE set null ON UPDATE no action;--> statement-breakpoint
+ALTER TABLE "conversation_attachment_contexts" ADD CONSTRAINT "conversation_attachment_contexts_gateway_id_gateway_resources_id_fk" FOREIGN KEY ("gateway_id") REFERENCES "public"."gateway_resources"("id") ON DELETE set null ON UPDATE no action;

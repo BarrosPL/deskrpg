@@ -1,3 +1,4 @@
+import { retireAttachmentContexts } from "@/lib/conversation-attachments/repository";
 import { and, desc, eq, inArray, sql } from "drizzle-orm";
 import {
   db,
@@ -382,6 +383,7 @@ export async function renameRoom(roomId: string, name: string): Promise<void> {
 }
 
 export async function deleteRoom(roomId: string): Promise<void> {
+  await retireAttachmentContexts({ roomId });
   await db.delete(chatRooms).where(eq(chatRooms.id, roomId));
 }
 
