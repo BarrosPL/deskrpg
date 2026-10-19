@@ -156,9 +156,10 @@ export async function prepareAttachments(
             requestId: `${request.requestId}:${file.id}:${target.npcId}`,
           }),
         );
+        // Retain the lease before verification so rejected bytes are also released.
+        byNpc[target.npcId].push({ ...prepared, id: file.id, name: file.name });
         if (prepared.sha256 !== file.sha256 || prepared.bytes !== file.bytes)
           throw new AttachmentServiceError(422, "attachment_checksum_mismatch");
-        byNpc[target.npcId].push({ ...prepared, id: file.id, name: file.name });
       } catch (error) {
         failures.push({
           npcId: target.npcId,
@@ -183,6 +184,7 @@ export async function releasePreparedFiles(
   byNpc: Record<string, PreparedFile[]>,
 ) {
   for (const target of request.targets) {
+    if (!byNpc[target.npcId]?.length) continue;
     const client = await profileClient(access, target);
     for (const file of byNpc[target.npcId] ?? [])
       result(
@@ -199,6 +201,7 @@ export async function renewPreparedFiles(
   byNpc: Record<string, PreparedFile[]>,
 ) {
   for (const target of request.targets) {
+    if (!byNpc[target.npcId]?.length) continue;
     const client = await profileClient(access, target);
     for (const file of byNpc[target.npcId] ?? [])
       result(
