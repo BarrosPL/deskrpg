@@ -1,4 +1,15 @@
 export type ErrorCode =
+  | "attachment_not_found"
+  | "attachment_too_large"
+  | "attachment_count_exceeded"
+  | "attachment_checksum_mismatch"
+  | "attachment_conflict"
+  | "attachment_backend_unsupported"
+  | "attachment_prepare_failed"
+  | "attachment_quota_exceeded"
+  | "attachment_feature_unavailable"
+  | "attachment_invalid_file"
+  | "attachment_invalid_selection"
   | "skill_reference_edit_removed"
   | "skill_purge_removed"
   | "skill_feature_unavailable"
@@ -239,6 +250,18 @@ export type ErrorCode =
 
 /** Every registered error code → translation key. The coverage guard scans this whole table. */
 export const ERROR_MESSAGE_KEYS: Record<ErrorCode, string> = {
+  attachment_not_found: "errors.attachment_not_found",
+  attachment_too_large: "errors.attachment_too_large",
+  attachment_count_exceeded: "errors.attachment_count_exceeded",
+  attachment_checksum_mismatch: "errors.attachment_checksum_mismatch",
+  attachment_conflict: "errors.attachment_conflict",
+  attachment_backend_unsupported: "errors.attachment_backend_unsupported",
+  attachment_prepare_failed: "errors.attachment_prepare_failed",
+  attachment_quota_exceeded: "errors.attachment_quota_exceeded",
+  attachment_feature_unavailable: "errors.attachment_feature_unavailable",
+  attachment_invalid_file: "errors.attachment_invalid_file",
+  attachment_invalid_selection: "errors.attachment_invalid_selection",
+
   skill_reference_edit_removed: "skills.error.skill_reference_edit_removed",
   skill_purge_removed: "skills.error.skill_purge_removed",
   skill_feature_unavailable: "skills.error.skill_feature_unavailable",

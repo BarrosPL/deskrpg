@@ -131,7 +131,7 @@ export async function recoverInterruptedRequests() {
   return db
     .update(requests)
     .set({ status: "outcome_unknown", updatedAt: new Date().toISOString() })
-    .where(inArray(requests.status, ["pending", "running", "preparing", "ready"]))
+    .where(inArray(requests.status, ["pending", "running", "preparing", "ready", "failed"]))
     .returning({ id: requests.id });
 }
 export async function allCleanupLinks() {
@@ -141,26 +141,23 @@ export async function allCleanupLinks() {
     .where(inArray(links.status, ["stored", "delete_pending"]));
 }
 export async function hasActiveRequest(contextId: string) {
-  return (
-    (
-      await db
-        .select({ id: requests.id })
-        .from(requests)
-        .where(
-          and(
-            eq(requests.contextId, contextId),
-            inArray(requests.status, [
-              "pending",
-              "preparing",
-              "ready",
-              "running",
-              "outcome_unknown",
-            ]),
-          ),
-        )
-        .limit(1)
-    ).length > 0
-  );
+  const rows = await db
+    .select({ status: requests.status, leaseStateJson: requests.leaseStateJson })
+    .from(requests)
+    .where(
+      and(
+        eq(requests.contextId, contextId),
+        inArray(requests.status, ["pending", "preparing", "ready", "running", "outcome_unknown"]),
+      ),
+    );
+  return rows.some((row) => {
+    if (row.status !== "outcome_unknown") return true;
+    try {
+      return JSON.parse(row.leaseStateJson)?.bindingsRevoked !== true;
+    } catch {
+      return true;
+    }
+  });
 }
 export async function markContextDeleted(id: string) {
   await db

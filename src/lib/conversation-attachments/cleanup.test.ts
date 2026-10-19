@@ -95,6 +95,7 @@ test("recovery revokes persisted bindings, retries offline failures, and preserv
     JSON.parse((await repo.getRequest("crashed"))!.leaseStateJson).bindingsRevoked,
     true,
   );
+  assert.equal(await repo.hasActiveRequest(context.id), false);
   const after = calls.length;
   await runAttachmentCleanup();
   assert.equal(calls.length, after, "successful revocation is not repeated");

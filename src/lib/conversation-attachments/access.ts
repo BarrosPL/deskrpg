@@ -1,7 +1,6 @@
 import { canAccessActiveMeetingAttachments } from "./meeting-access-registry";
 import { and, eq } from "drizzle-orm";
-import { db, npcs } from "@/db";
-import { requireChannelMember } from "@/lib/cron-access";
+import { db, npcs, channels, channelMembers } from "@/db";
 import { getRoom, isRoomMember } from "@/lib/chat-rooms";
 import { decryptGatewayToken, getChannelGatewayBinding } from "@/lib/gateway-resources";
 import {
@@ -29,8 +28,20 @@ export type AttachmentAccess = {
 };
 async function requireMember(channelId: string, userId: string | null) {
   if (!userId) throw new AttachmentServiceError(401, "unauthorized");
-  const member = await requireChannelMember(channelId, userId);
-  if (!member.ok) throw new AttachmentServiceError(member.response.status, "forbidden");
+  const [channel] = await db
+    .select({ ownerId: channels.ownerId })
+    .from(channels)
+    .where(eq(channels.id, channelId))
+    .limit(1);
+  if (!channel) throw new AttachmentServiceError(404, "channel_not_found");
+  if (channel.ownerId !== userId) {
+    const [member] = await db
+      .select({ id: channelMembers.id })
+      .from(channelMembers)
+      .where(and(eq(channelMembers.channelId, channelId), eq(channelMembers.userId, userId)))
+      .limit(1);
+    if (!member) throw new AttachmentServiceError(403, "forbidden");
+  }
   return userId;
 }
 async function requireSource(

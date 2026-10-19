@@ -173,3 +173,24 @@ test("active meeting authorizer must explicitly allow the actor", async () => {
   assert.equal(await canAccessActiveMeetingAttachments({ ...input, userId: "stranger" }), false);
   assert.equal(await canAccessActiveMeetingAttachments({ ...input, userId: "participant" }), true);
 });
+
+test("restart makes failed requests non-retryable when their in-memory closures are gone", async () => {
+  const context = await repo.createContext({
+    kind: "dm",
+    scopeKey: "failed-restart",
+    sourceChannelId: "ch",
+    sourceGatewayId: "gw",
+    ownerUserId: "u",
+  });
+  await repo.createRequest({
+    id: "failed-restart",
+    contextId: context.id,
+    senderId: "u",
+    revision: 0,
+    targets: [],
+    fileIds: [],
+  });
+  await repo.transitionRequest("failed-restart", ["pending"], "failed");
+  await repo.recoverInterruptedRequests();
+  assert.equal((await repo.getRequest("failed-restart"))?.status, "outcome_unknown");
+});
