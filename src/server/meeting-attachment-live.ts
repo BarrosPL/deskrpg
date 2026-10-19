@@ -160,16 +160,22 @@ export class LiveMeetingAttachments {
   };
   wrap(npcId: string, adapter: NpcAdapter, sessionKey: string): NpcAdapter {
     this.targets.set(npcId, { npcId, adapter, sessionKey });
+    const adapterExecutions = new Set<AbortController>();
     const execute = async (options: AdapterExecuteOptions) => {
       const abort = new AbortController();
       this.executions.add(abort);
+      adapterExecutions.add(abort);
+      const stopAdapter = () => {
+        void adapter.abort?.(options.sessionKey).catch(() => {});
+      };
+      abort.signal.addEventListener("abort", stopAdapter, { once: true });
       try {
         while (!abort.signal.aborted) {
           await this.barrier.wait(abort.signal);
           let stale = false;
           const revision = this.barrier.revision;
           const files = this.barrier.files();
-          if (!files.length) return adapter.execute(options);
+          if (!files.length) return await adapter.execute(options);
           let result: Awaited<ReturnType<NpcAdapter["execute"]>> | undefined;
           const next = async (offset: number, prepared: PreparedFile[]): Promise<void> => {
             if (offset >= files.length) {
@@ -201,8 +207,17 @@ export class LiveMeetingAttachments {
                   throw new AttachmentServiceError(409, "attachment_conflict");
               },
               run: async (byNpc, signal) => {
-                if (signal.aborted) throw new Error("meeting_aborted");
-                await next(offset + 3, [...prepared, ...(byNpc[npcId] ?? [])]);
+                const cancelled = () => abort.abort();
+                signal.addEventListener("abort", cancelled, { once: true });
+                try {
+                  if (signal.aborted) {
+                    abort.abort();
+                    throw new Error("meeting_aborted");
+                  }
+                  await next(offset + 3, [...prepared, ...(byNpc[npcId] ?? [])]);
+                } finally {
+                  signal.removeEventListener("abort", cancelled);
+                }
               },
               changed: (view) => {
                 this.barrier.change(requestId, stale ? "cancelled" : view.state);
@@ -224,13 +239,18 @@ export class LiveMeetingAttachments {
         }
         throw new Error("meeting_aborted");
       } finally {
+        abort.signal.removeEventListener("abort", stopAdapter);
+        adapterExecutions.delete(abort);
         this.executions.delete(abort);
       }
     };
     const wrapped = replaceExecute(adapter, execute);
     wrapped.abort = async (key) => {
-      for (const c of this.executions) c.abort();
-      await adapter.abort?.(key);
+      if (adapterExecutions.size) {
+        for (const c of adapterExecutions) c.abort();
+      } else {
+        await adapter.abort?.(key);
+      }
     };
     return wrapped;
   }

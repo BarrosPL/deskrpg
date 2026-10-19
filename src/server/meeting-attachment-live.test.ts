@@ -233,3 +233,40 @@ test("excluding completed material does not try to cancel a retired execution", 
   assert.equal(controls, 0);
   assert.equal(runtime.ready, true);
 });
+
+test("aborting one participant leaves other participant turns running", async () => {
+  const runtime = new LiveMeetingAttachments(
+    {
+      channelId: "c",
+      userId: "owner",
+      isParticipant: () => true,
+      canControl: () => true,
+      changed: () => {},
+    },
+    "context",
+  );
+  const aborted: string[] = [];
+  const releases = new Map<string, () => void>();
+  const adapterFor = (id: string): NpcAdapter => ({
+    type: "fake",
+    execute: async () => {
+      await new Promise<void>((resolve) => releases.set(id, resolve));
+      return { response: "ok", session: { sessionRef: id } };
+    },
+    abort: async () => {
+      aborted.push(id);
+      releases.get(id)?.();
+    },
+    testConnection: async () => ({ status: "ok" }),
+  });
+  const a = runtime.wrap("a", adapterFor("a"), "a");
+  const b = runtime.wrap("b", adapterFor("b"), "b");
+  const first = a.execute({ sessionKey: "a", prompt: "one" });
+  const second = b.execute({ sessionKey: "b", prompt: "two" });
+  await new Promise<void>((resolve) => setImmediate(resolve));
+  await a.abort?.("a");
+  await first;
+  assert.deepEqual(aborted, ["a"]);
+  releases.get("b")?.();
+  await second;
+});
