@@ -26,7 +26,7 @@ DeskRPG does not bundle an agent runtime. It attaches to the Hermes gateway you 
 
 - Website: [https://deskrpg.com](https://deskrpg.com) (live)
 - Source code: `https://github.com/dandacompany/deskrpg`
-- Version: `v2026.1007.1` — The AI model step of the hire wizard lists the same providers as Hermes' `hermes model`, in its order: each provider appears once (Nebius Token Factory and Meta Model API used to repeat once per alias), and OpenRouter, Mixture of Agents and custom endpoints now appear. Providers you can already use stay at the top, and an OpenRouter API key can be entered in the wizard. Includes everything in 2026.1003.1. Requires plugin 0.31.1.
+- Version: `v2026.1019.1` — Share original files with staff in direct messages, rooms, and meetings. Hermes receives the original bytes even when text extraction is unavailable. Includes upload status, retry/cancel controls, downloads, and retained meeting references. Requires plugin 0.32.0.
 
 ## What You Can Do
 
@@ -225,7 +225,7 @@ Conversations work without it. Kanban boards, the event stream and cron need
 [`deskrpg-hermes-plugin`](https://github.com/dandacompany/deskrpg-hermes-plugin) on the gateway host:
 
 ```bash
-hermes plugins install https://github.com/dandacompany/deskrpg-hermes-plugin --ref c9b4880121c08331cc780fb08259cb6352e8ea5d
+hermes plugins install https://github.com/dandacompany/deskrpg-hermes-plugin --ref 45caa875f2059152188eca515778e8af2a9c08ae
 hermes plugins enable deskrpg
 # restart the gateway — routes are attached only at startup
 ```
@@ -241,7 +241,7 @@ keeps running. Replace it in this order:
 
 ```bash
 hermes plugins disable deskrpg
-hermes plugins install https://github.com/dandacompany/deskrpg-hermes-plugin --ref c9b4880121c08331cc780fb08259cb6352e8ea5d --force
+hermes plugins install https://github.com/dandacompany/deskrpg-hermes-plugin --ref 45caa875f2059152188eca515778e8af2a9c08ae --force
 hermes plugins enable deskrpg
 hermes gateway restart
 ```

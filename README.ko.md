@@ -33,7 +33,7 @@ DeskRPG는 에이전트 런타임을 따로 담고 있지 않습니다. 이미 �
 
 - 웹사이트: [https://deskrpg.com](https://deskrpg.com) (운영 중)
 - 소스 코드: `https://github.com/dandacompany/deskrpg`
-- 버전: `v2026.1007.1` — 채용 마법사의 AI 모델 단계가 Hermes 의 `hermes model` 과 같은 프로바이더 목록을 같은 순서로 보여 줍니다. 프로바이더마다 한 번씩만 나오고(Nebius Token Factory·Meta Model API 가 별칭 수만큼 반복되던 문제), OpenRouter·Mixture of Agents·custom 엔드포인트가 새로 보입니다. 이미 쓸 수 있는 프로바이더는 계속 위에 있고, OpenRouter API 키를 마법사에서 입력할 수 있습니다. 2026.1003.1 의 변경을 모두 포함합니다. 플러그인 0.31.1 이 필요합니다.
+- 버전: `v2026.1019.1` — DM·방·회의에서 직원에게 원본 파일을 전달합니다. 텍스트 추출 여부와 관계없이 Hermes가 실제 원본을 읽으며, 업로드 상태·재시도·취소·다운로드와 회의록의 원본 연결을 지원합니다. 플러그인 0.32.0이 필요합니다.
 
 ## 무엇을 할 수 있나요
 
@@ -225,7 +225,7 @@ DeskRPG에 연결하는 절차는 네 단계입니다.
 [`deskrpg-hermes-plugin`](https://github.com/dandacompany/deskrpg-hermes-plugin) 이 필요합니다.
 
 ```bash
-hermes plugins install https://github.com/dandacompany/deskrpg-hermes-plugin --ref c9b4880121c08331cc780fb08259cb6352e8ea5d
+hermes plugins install https://github.com/dandacompany/deskrpg-hermes-plugin --ref 45caa875f2059152188eca515778e8af2a9c08ae
 hermes plugins enable deskrpg
 # 게이트웨이 재시작 — 라우트는 기동할 때만 붙습니다
 ```
@@ -240,7 +240,7 @@ DeskRPG는 플러그인이 없거나 낡았다고 판단하면 보드·일정 �
 
 ```bash
 hermes plugins disable deskrpg
-hermes plugins install https://github.com/dandacompany/deskrpg-hermes-plugin --ref c9b4880121c08331cc780fb08259cb6352e8ea5d --force
+hermes plugins install https://github.com/dandacompany/deskrpg-hermes-plugin --ref 45caa875f2059152188eca515778e8af2a9c08ae --force
 hermes plugins enable deskrpg
 hermes gateway restart
 ```

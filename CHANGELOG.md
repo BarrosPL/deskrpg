@@ -7,6 +7,22 @@ GitHub Releases will be written later at actual release time.
 
 ## [Unreleased]
 
+## [2026.1019.1] - 2026-10-19
+
+### Added
+
+- Deliver original files to Hermes in direct messages, rooms, and meetings, with per-profile access and execution preparation.
+- Show upload and preparation status, retry or cancel failed requests, download originals, and retain file references in meeting archives.
+
+### Fixed
+
+- Preserve original file access when text extraction is unavailable.
+- Use Hermes file identifiers in tool manifests so preparing an attachment again succeeds.
+
+### Changed
+
+- Install DeskRPG Hermes plugin 0.32.0 for original conversation file support.
+
 ## [2026.921.2] - 2026-09-21
 
 ### Fixed
