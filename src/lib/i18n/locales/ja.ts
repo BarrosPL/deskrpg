@@ -1,5 +1,37 @@
 // Japanese translations
 const ja: Record<string, string> = {
+  "attachments.exclude": "会議から除外",
+
+  "attachments.request.pending": "ファイル送信待ち",
+  "attachments.request.preparing": "ファイル準備中",
+  "attachments.request.ready": "ファイル準備完了",
+  "attachments.request.running": "応答中",
+  "attachments.request.failed": "ファイル送信失敗",
+  "attachments.request.outcome_unknown":
+    "実行が中断されました。前の応答を確認してから再送してください。",
+  "attachments.cancelRequest": "リクエスト取消",
+
+  "attachments.scope.dm": "本人とこの従業員が原本を使用できます。",
+  "attachments.scope.room":
+    "メンションに関係なく、この部屋を閲覧できる全員が原本にアクセスできます。",
+  "attachments.scope.meeting": "会議参加者と議事録の閲覧者が原本にアクセスできます。",
+  "attachments.uploading": "アップロード中",
+  "attachments.stored": "保存済み",
+  "attachments.preparing": "準備中",
+  "attachments.ready": "準備完了",
+  "attachments.failed": "失敗",
+  "attachments.excluded": "除外済み",
+  "attachments.deleted": "削除済み",
+  "attachments.download": "ダウンロード",
+  "attachments.retry": "再試行",
+  "attachments.cancel": "アップロード取消",
+  "attachments.remove": "原本を削除",
+  "attachments.refresh": "更新",
+  "attachments.limit": "最大3ファイル、各5 MiB",
+  "attachments.unavailable":
+    "原本を添付するにはゲートウェイプラグインを更新してください。テキストでの会話は続行できます。",
+  "attachments.meetingInactive": "会議を開始すると原本を共有できます。",
+
   "errors.event_cursor_handoff_required":
     "通知を引き継ぐにはゲートウェイプラグインを更新してください。",
   "errors.event_carrier_handoff_pending":

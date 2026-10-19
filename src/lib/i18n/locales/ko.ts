@@ -1,5 +1,37 @@
 // Korean translations
 const ko: Record<string, string> = {
+  "attachments.exclude": "회의에서 제외",
+
+  "attachments.request.pending": "파일 전달 대기 중",
+  "attachments.request.preparing": "파일 준비 중",
+  "attachments.request.ready": "파일 준비 완료",
+  "attachments.request.running": "응답 실행 중",
+  "attachments.request.failed": "파일 전달 실패",
+  "attachments.request.outcome_unknown":
+    "실행이 중단됐습니다. 이전 응답을 확인한 뒤 다시 요청하세요.",
+  "attachments.cancelRequest": "요청 취소",
+
+  "attachments.scope.dm": "본인과 이 직원이 원본을 사용합니다.",
+  "attachments.scope.room":
+    "멘션과 관계없이 이 방을 읽을 수 있는 모든 사람이 원본을 볼 수 있습니다.",
+  "attachments.scope.meeting": "회의 참가자와 회의록 열람자가 원본을 볼 수 있습니다.",
+  "attachments.uploading": "업로드 중",
+  "attachments.stored": "원본 저장됨",
+  "attachments.preparing": "준비 중",
+  "attachments.ready": "준비 완료",
+  "attachments.failed": "실패",
+  "attachments.excluded": "회의에서 제외됨",
+  "attachments.deleted": "삭제됨",
+  "attachments.download": "다운로드",
+  "attachments.retry": "재시도",
+  "attachments.cancel": "업로드 취소",
+  "attachments.remove": "원본 삭제",
+  "attachments.refresh": "새로고침",
+  "attachments.limit": "파일당 5 MiB, 최대 3개",
+  "attachments.unavailable":
+    "원본 첨부를 사용하려면 게이트웨이 플러그인을 업데이트하세요. 텍스트 대화는 계속할 수 있습니다.",
+  "attachments.meetingInactive": "회의를 시작하면 원본 파일을 공유할 수 있습니다.",
+
   "errors.event_cursor_handoff_required":
     "알림을 이어받으려면 게이트웨이 플러그인을 업데이트해야 합니다.",
   "errors.event_carrier_handoff_pending":

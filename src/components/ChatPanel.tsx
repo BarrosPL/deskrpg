@@ -5,7 +5,8 @@ import type { ReportItem } from "@/game/report-queue";
 import DialogReportSummary from "./chat/DialogReportSummary";
 import { Pencil, UserMinus, RotateCcw, Undo2 } from "lucide-react";
 import type { NpcChatMessage } from "./NpcDialog";
-import ChatInput from "./ChatInput";
+import ChatInput from "./conversation/ConversationChatInput";
+import type { AttachmentSendPayload } from "./conversation/use-conversation-attachments";
 import type { ChatTaskDraft } from "./kanban/kanban-view-model";
 import ChatBubble from "./ui/ChatBubble";
 import RosterAvatar from "./RosterAvatar";
@@ -88,7 +89,12 @@ interface ChatPanelProps {
   npcChatInputDisabled?: boolean;
   npcChatDisabledPlaceholder?: string;
   /** `skills` is set only when the message carries skill chips. */
-  onSend: (message: string, files?: File[], skills?: string[]) => void;
+  onSend: (
+    message: string,
+    files?: File[],
+    skills?: string[],
+    attachments?: AttachmentSendPayload,
+  ) => void;
   /** Stops the open NPC's reply in progress. Without it, no stop button is shown. */
   onStopNpcResponse?: (requestId: string) => void;
   /** Stops a room reply to the viewer's own message. Without it, no stop button is shown. */
@@ -109,7 +115,7 @@ interface ChatPanelProps {
   channelChatOpen?: boolean;
   channelChatInputDisabled?: boolean;
   /** `skills` is set only when the message carries skill chips (for the one named employee). */
-  onRoomSend: (message: string, skills?: string[]) => void;
+  onRoomSend: (message: string, skills?: string[], attachments?: AttachmentSendPayload) => void;
   onRoomAction: (action: RoomAction) => void;
   onRoomCreate: (name: string, npcIds: string[], userIds: string[]) => void;
   onRoomInvite: (roomId: string, npcIds: string[], userIds: string[]) => void;
@@ -1108,6 +1114,8 @@ export default function ChatPanel({
                   </div>
                 )}
                 <ChatInput
+                  channelId={cron?.channelId}
+                  conversation={dialogNpc ? { kind: "dm", id: dialogNpc.npcId } : undefined}
                   onSend={onSend}
                   onStop={
                     onStopNpcResponse && activeNpcResponse
@@ -1259,7 +1267,13 @@ export default function ChatPanel({
               />
             )}
             <ChatInput
-              onSend={(message, _files, skills) => onRoomSend(message, skills)}
+              channelId={cron?.channelId}
+              conversation={
+                roomState.currentRoomId ? { kind: "room", id: roomState.currentRoomId } : undefined
+              }
+              onSend={(message, _files, skills, attachments) =>
+                onRoomSend(message, skills, attachments)
+              }
               onStop={
                 onStopRoomResponse && activeRoomResponse && roomState.currentRoomId
                   ? () => onStopRoomResponse(roomState.currentRoomId!, activeRoomResponse.requestId)

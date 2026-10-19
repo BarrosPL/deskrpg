@@ -1,5 +1,38 @@
 // English translations (default/fallback)
 const en: Record<string, string> = {
+  "attachments.exclude": "Exclude from meeting",
+
+  "attachments.request.pending": "Waiting to deliver files",
+  "attachments.request.preparing": "Preparing files",
+  "attachments.request.ready": "Files ready",
+  "attachments.request.running": "Response running",
+  "attachments.request.failed": "File delivery failed",
+  "attachments.request.outcome_unknown":
+    "Execution interrupted; check the previous response before sending again",
+  "attachments.cancelRequest": "Cancel request",
+
+  "attachments.scope.dm": "Only you and this employee can use these originals.",
+  "attachments.scope.room":
+    "Everyone who can read this room can access these originals, including messages with mentions.",
+  "attachments.scope.meeting":
+    "Meeting participants and minutes readers can access these originals.",
+  "attachments.uploading": "Uploading",
+  "attachments.stored": "Stored",
+  "attachments.preparing": "Preparing",
+  "attachments.ready": "Ready",
+  "attachments.failed": "Failed",
+  "attachments.excluded": "Excluded",
+  "attachments.deleted": "Deleted",
+  "attachments.download": "Download",
+  "attachments.retry": "Retry",
+  "attachments.cancel": "Cancel upload",
+  "attachments.remove": "Delete original",
+  "attachments.refresh": "Refresh",
+  "attachments.limit": "Up to 3 files, 5 MiB each",
+  "attachments.unavailable":
+    "Update the gateway plugin to attach originals. Text chat remains available.",
+  "attachments.meetingInactive": "Start a meeting to share original files.",
+
   "errors.event_cursor_handoff_required":
     "Update the gateway plugin to transfer notification delivery.",
   "errors.event_carrier_handoff_pending":

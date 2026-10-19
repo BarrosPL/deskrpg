@@ -16,6 +16,8 @@ import type { MeetingOutcome, MeetingSummaryStatus } from "@/lib/meeting-outcome
 import type { OutcomeRegistration } from "@/lib/meeting-outcome-draft";
 
 import MeetingOutcomePanel from "./MeetingOutcomePanel";
+import AttachmentHistory from "../conversation/AttachmentHistory";
+import type { ConversationRef } from "@/lib/conversation-attachments/types";
 
 type Loaded = {
   /** Which minutes this value belongs to. When the minutes change, don't render until the new value arrives. */
@@ -23,6 +25,7 @@ type Loaded = {
   outcome: MeetingOutcome | null;
   summaryStatus: MeetingSummaryStatus;
   canManage: boolean;
+  attachmentConversation?: ConversationRef;
 };
 
 export type MeetingOutcomeSectionProps = {
@@ -98,6 +101,7 @@ export default function MeetingOutcomeSection({
         return (await res.json()) as {
           minutes: { outcome: MeetingOutcome | null; summaryStatus?: MeetingSummaryStatus };
           canManage?: boolean;
+          attachmentConversation?: ConversationRef;
         };
       })
       .then((data) => {
@@ -108,6 +112,7 @@ export default function MeetingOutcomeSection({
         );
         setLoaded({
           minutesId,
+          attachmentConversation: data.attachmentConversation,
           outcome: data.minutes.outcome,
           summaryStatus: data.minutes.summaryStatus ?? "ok",
           canManage: data.canManage === true,
@@ -159,18 +164,23 @@ export default function MeetingOutcomeSection({
   if (!loaded || loaded.minutesId !== minutesId) return null;
   const registered = loaded.outcome?.registered ?? null;
   return (
-    <MeetingOutcomePanel
-      // Regenerating the summary swaps the draft for the new outcome.
-      key={`${minutesId}:${loaded.summaryStatus}:${loaded.outcome?.followUps.length ?? 0}`}
-      outcome={loaded.outcome}
-      summaryStatus={loaded.summaryStatus}
-      npcs={npcs}
-      canRegister={loaded.canManage}
-      registerSupported={registerSupported}
-      registered={registered}
-      onRegister={register}
-      onRetrySummary={retry}
-      onDecline={onDeclined}
-    />
+    <>
+      {loaded.attachmentConversation && (
+        <AttachmentHistory channelId={channelId} conversation={loaded.attachmentConversation} />
+      )}
+      <MeetingOutcomePanel
+        // Regenerating the summary swaps the draft for the new outcome.
+        key={`${minutesId}:${loaded.summaryStatus}:${loaded.outcome?.followUps.length ?? 0}`}
+        outcome={loaded.outcome}
+        summaryStatus={loaded.summaryStatus}
+        npcs={npcs}
+        canRegister={loaded.canManage}
+        registerSupported={registerSupported}
+        registered={registered}
+        onRegister={register}
+        onRetrySummary={retry}
+        onDecline={onDeclined}
+      />
+    </>
   );
 }

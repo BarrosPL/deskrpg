@@ -1,4 +1,5 @@
 "use client";
+import type { AttachmentSendPayload } from "@/components/conversation/use-conversation-attachments";
 
 import SocketConnectionNotice from "@/components/SocketConnectionNotice";
 import { APP_VERSION, LICENSE_URL, REPO_URL } from "@/lib/app-meta";
@@ -1617,7 +1618,12 @@ function GamePageInner({ onFatal }: GamePageClientProps) {
   );
 
   const handleDialogSend = useCallback(
-    async (message: string, files?: File[], skills?: string[]) => {
+    async (
+      message: string,
+      files?: File[],
+      skills?: string[],
+      attachments?: AttachmentSendPayload,
+    ) => {
       if (!socket || !dialogNpc) return;
       if (!socket.connected) {
         showToastNotification(
@@ -1638,20 +1644,6 @@ function GamePageInner({ onFatal }: GamePageClientProps) {
         ...prev,
         { id: sourceMessageId, role: "player", content: displayMessage },
       ]);
-
-      // Convert files to ArrayBuffers for socket transport
-      let filePayloads:
-        Array<{ name: string; type: string; size: number; data: ArrayBuffer }> | undefined;
-      if (files && files.length > 0) {
-        filePayloads = await Promise.all(
-          files.map(async (f) => ({
-            name: f.name,
-            type: f.type,
-            size: f.size,
-            data: await f.arrayBuffer(),
-          })),
-        );
-      }
 
       if (socket.id) EventBus.emit("chat:speech", { actorId: socket.id, text: displayMessage });
       // A DM opened from the list has not called that employee — call them **at send time** (Dante's instruction).
@@ -1684,7 +1676,7 @@ function GamePageInner({ onFatal }: GamePageClientProps) {
         // Right after reconnecting the server's `players` does not have this socket yet and does not know the character.
         // Send the character along so conversation in that window is not lost (the server verifies ownership).
         characterId: characterId ?? undefined,
-        files: filePayloads,
+        ...attachments,
         ...(skills?.length ? { skills } : {}),
       });
     },
@@ -1692,7 +1684,7 @@ function GamePageInner({ onFatal }: GamePageClientProps) {
   );
 
   const handleRoomSend = useCallback(
-    (message: string, skills?: string[]) => {
+    (message: string, skills?: string[], attachments?: AttachmentSendPayload) => {
       if (!socket || !socket.connected) {
         showToastNotification("channel-chat-disconnected", t("game.channelChatDisconnected"));
         return;
@@ -1702,6 +1694,7 @@ function GamePageInner({ onFatal }: GamePageClientProps) {
         roomId: currentRoomId,
         message,
         ...(skills?.length ? { skills } : {}),
+        ...attachments,
       });
       if (socket.id) EventBus.emit("chat:speech", { actorId: socket.id, text: message });
       // A message restarting the conversation — call participants who went back to their seats to our side again.

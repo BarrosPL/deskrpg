@@ -15,7 +15,8 @@ import {
   type SkillCandidate,
 } from "./mention-input/mention-model";
 
-interface ChatInputProps {
+export interface ChatInputProps {
+  attachmentCount?: number;
   /** `skills` is set only when the message carries skill chips (they are not part of `message`). */
   onSend: (message: string, files?: File[], skills?: string[]) => void;
   value?: string;
@@ -58,6 +59,7 @@ interface ChatInputProps {
 
 export default function ChatInput({
   onSend,
+  attachmentCount = 0,
   value,
   onValueChange,
   placeholder,
@@ -141,7 +143,7 @@ export default function ChatInput({
 
   const handleSend = useCallback(() => {
     const trimmed = draft.trim();
-    if (!trimmed && files.length === 0 && skills.length === 0) return;
+    if (!trimmed && files.length === 0 && attachmentCount === 0 && skills.length === 0) return;
     if (cooldown || disabled) return;
     if (skills.length > 0) onSend(trimmed, files.length > 0 ? files : undefined, skills);
     else onSend(trimmed, files.length > 0 ? files : undefined);
@@ -153,7 +155,17 @@ export default function ChatInput({
     if (textareaRef.current) {
       textareaRef.current.style.height = "auto";
     }
-  }, [draft, files, skills, cooldown, disabled, onSend, updateDraft, updateSegments]);
+  }, [
+    draft,
+    files,
+    attachmentCount,
+    skills,
+    cooldown,
+    disabled,
+    onSend,
+    updateDraft,
+    updateSegments,
+  ]);
 
   const handleKeyDown = useCallback(
     (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
@@ -180,7 +192,10 @@ export default function ChatInput({
     setFiles((prev) => prev.filter((_, i) => i !== idx));
   }, []);
 
-  const canSend = (draft.trim() || files.length > 0 || skills.length > 0) && !cooldown && !disabled;
+  const canSend =
+    (draft.trim() || files.length > 0 || attachmentCount > 0 || skills.length > 0) &&
+    !cooldown &&
+    !disabled;
 
   const accentTheme = accentClasses(accent);
   const btnColor = canSend

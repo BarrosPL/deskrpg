@@ -2,7 +2,9 @@
 
 import { useCallback, useEffect, useEffectEvent, useRef, useState } from "react";
 import type { Socket } from "socket.io-client";
-import ChatInput from "./ChatInput";
+import ChatInput from "./conversation/ConversationChatInput";
+import type { AttachmentSendPayload } from "./conversation/use-conversation-attachments";
+import type { ConversationRef } from "@/lib/conversation-attachments/types";
 import MeetingOutcomeSection from "./meeting-room/MeetingOutcomeSection";
 import { useMeetingAutoReturn } from "./meeting-room/use-meeting-auto-return";
 import MinutesModal from "./MinutesModal";
@@ -260,6 +262,7 @@ export default function MeetingRoom({
 
   // --- New state for broker-driven discussions ---
   const [meetingActive, setMeetingActive] = useState(false);
+  const [attachmentConversation, setAttachmentConversation] = useState<ConversationRef>();
   const [startingMeeting, setStartingMeeting] = useState(false);
   const [currentSpeaker, setCurrentSpeaker] = useState<{
     npcId: string;
@@ -392,12 +395,14 @@ export default function MeetingRoom({
 
     // Listen for state sync (on join)
     const handleState = (data: {
+      attachmentConversation?: ConversationRef;
       participants: { id: string; userId?: string; name: string; appearance: unknown }[];
       messages: MeetingMessage[];
       discussion?: MeetingDiscussionState | null;
       isInitiator?: boolean;
       spatial?: MeetingSpatialState | null;
     }) => {
+      setAttachmentConversation(data.attachmentConversation);
       confirmed = true;
       roster = data.participants;
       clearTimeout(joinTimer);
@@ -633,12 +638,14 @@ export default function MeetingRoom({
     };
 
     const handleModeChanged = (data: {
+      attachmentConversation?: ConversationRef;
       mode: "auto" | "manual" | "directed";
       by: string;
       initiatorId?: string;
       discussion?: MeetingDiscussionState;
       execution?: MeetingExecutionState;
     }) => {
+      if (data.attachmentConversation) setAttachmentConversation(data.attachmentConversation);
       if (data.discussion) {
         setStartingMeeting(false);
         setDiscussionNpcs(restoreMeetingNpcs(data.discussion.npcs, npcsRef.current));
@@ -890,14 +897,20 @@ export default function MeetingRoom({
   );
 
   const handleSend = useCallback(
-    (msg?: string) => {
+    (msg?: string, attachments?: AttachmentSendPayload) => {
       const trimmed = (msg ?? input).trim();
-      if (!trimmed || cooldown || !socket || joinState !== "joined") return;
+      if (
+        (!trimmed && !attachments?.attachmentIds.length) ||
+        cooldown ||
+        !socket ||
+        joinState !== "joined"
+      )
+        return;
       if (!msg) setInput("");
       if (meetingActive) {
-        socket.emit("meeting:user-speak", { channelId, message: trimmed });
+        socket.emit("meeting:user-speak", { channelId, message: trimmed, ...attachments });
       } else {
-        socket.emit("meeting:chat", { channelId, message: trimmed });
+        socket.emit("meeting:chat", { channelId, message: trimmed, ...attachments });
       }
       setCooldown(true);
       setTimeout(() => setCooldown(false), 2000);
@@ -1238,7 +1251,11 @@ export default function MeetingRoom({
                   npcNames={npcNames}
                 />
                 <ChatInput
-                  onSend={(msg) => handleSend(msg)}
+                  channelId={channelId}
+                  conversation={meetingActive ? attachmentConversation : undefined}
+                  canControlAttachments={isInitiator}
+                  scope="meeting"
+                  onSend={(msg, _files, _skills, attachments) => handleSend(msg, attachments)}
                   placeholder={t("meeting.speakToMeeting")}
                   disabled={joinState !== "joined"}
                   disabledPlaceholder={t(
