@@ -127,18 +127,13 @@ export default function ConversationChatInput({
         onSend={(message, _files, skills) => {
           const requestId = crypto.randomUUID();
           if (attachments.selectedIds.length) execution.start(requestId);
-          onSend(
-            message,
-            undefined,
-            skills,
-            conversation && attachments.selectedIds.length
-              ? {
-                  attachmentIds: attachments.selectedIds,
-                  attachmentRequestId: requestId,
-                  attachmentConversation: conversation,
-                }
-              : undefined,
-          );
+          if (conversation && attachments.selectedIds.length) {
+            onSend(message, undefined, skills, {
+              attachmentIds: attachments.selectedIds,
+              attachmentRequestId: requestId,
+              attachmentConversation: conversation,
+            });
+          } else onSend(message, undefined, skills);
           attachments.clearSelection();
         }}
       />

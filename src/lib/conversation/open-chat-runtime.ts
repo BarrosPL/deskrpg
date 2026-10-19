@@ -102,6 +102,7 @@ export class OpenChatRuntime {
   private readonly queue = new SessionQueue(8);
   /** requestId → npcId of every turn queued or running. */
   private readonly turns = new Map<string, string>();
+  private readonly turnSources = new Map<string, string>();
   /** npcId → requestId of the turn it is speaking now. */
   private readonly speaking = new Map<string, string>();
   private readonly cancelled = new Set<string>();
@@ -198,6 +199,11 @@ export class OpenChatRuntime {
     return true;
   }
 
+  cancelSource(sourceMessageId: string): void {
+    for (const [id, source] of this.turnSources)
+      if (source === sourceMessageId) this.cancelTurn(id);
+  }
+
   async handleHumanMessage(
     senderName: string,
     text: string,
@@ -275,6 +281,7 @@ export class OpenChatRuntime {
       };
       this.callbacks.onTurnQueued?.(npcId, runtime.displayName, context);
       this.turns.set(context.requestId, npcId);
+      this.turnSources.set(context.requestId, sourceMessageId);
       // The chain runs after this job releases its queue slot, avoiding A -> B -> A deadlocks.
       const job = this.queue.run(npcId, () => this.speakOne(npcId, calledBy, context, recent));
       work.push(
@@ -316,6 +323,7 @@ export class OpenChatRuntime {
       return await this.speakTurn(npcId, runtime, calledBy, context, recent);
     } finally {
       this.turns.delete(context.requestId);
+      this.turnSources.delete(context.requestId);
       this.cancelled.delete(context.requestId);
       if (this.speaking.get(npcId) === context.requestId) this.speaking.delete(npcId);
     }

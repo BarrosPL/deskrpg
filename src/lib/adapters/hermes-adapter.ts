@@ -32,7 +32,8 @@ export class HermesAdapter implements NpcAdapter {
   async ensureSession(sessionKey: string): Promise<string> {
     if (!this.preparingSession) {
       this.preparingSession = (async () => {
-        if (!this.sessionId) this.sessionId = (await this.client.createSession(sessionKey)).sessionId;
+        if (!this.sessionId)
+          this.sessionId = (await this.client.createSession(sessionKey)).sessionId;
         this.attachmentSessionId = this.sessionId;
         return this.sessionId;
       })().catch((error) => {

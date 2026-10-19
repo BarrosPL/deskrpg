@@ -146,18 +146,23 @@ describe("HermesAdapter", () => {
   test("prepares one session and binds attachment runs to that exact session", async () => {
     const bodies: Array<Record<string, unknown>> = [];
     let creates = 0;
-    const adapter = new HermesAdapter(clientWith((url, init) => {
-      if (url.endsWith("/api/sessions")) {
-        creates++;
-        return Response.json({ session: { id: "prepared-session" } });
-      }
-      if (url.endsWith("/v1/runs")) {
-        bodies.push(JSON.parse(String(init?.body)));
-        return Response.json({ run_id: "r-prepared" });
-      }
-      return sseResponse(['event: run.completed\ndata: {"content":"done"}\n\n']);
-    }));
-    assert.deepEqual(await Promise.all([adapter.ensureSession("room-a"), adapter.ensureSession("room-a")]), ["prepared-session", "prepared-session"]);
+    const adapter = new HermesAdapter(
+      clientWith((url, init) => {
+        if (url.endsWith("/api/sessions")) {
+          creates++;
+          return Response.json({ session: { id: "prepared-session" } });
+        }
+        if (url.endsWith("/v1/runs")) {
+          bodies.push(JSON.parse(String(init?.body)));
+          return Response.json({ run_id: "r-prepared" });
+        }
+        return sseResponse(['event: run.completed\ndata: {"content":"done"}\n\n']);
+      }),
+    );
+    assert.deepEqual(
+      await Promise.all([adapter.ensureSession("room-a"), adapter.ensureSession("room-a")]),
+      ["prepared-session", "prepared-session"],
+    );
     await adapter.execute({ sessionKey: "room-a", prompt: "read", multiParty: true });
     assert.equal(creates, 1);
     assert.equal(bodies[0].session_id, "prepared-session");

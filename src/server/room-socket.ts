@@ -1,3 +1,5 @@
+import { parseAttachmentSend, submitAttachmentExecution } from "./conversation-attachment-service";
+import { formatAttachmentManifest } from "./conversation-attachment-runtime";
 import { getRoomResponseSnapshot } from "./room-runtime";
 // Socket layer for per-room chat. Replaces the old `chat:*` (one channel = one conversation).
 //
@@ -36,6 +38,7 @@ export type RoomErrorCode =
   | "cooldown"
   | "not_joined"
   | "invalid"
+  | import("@/lib/conversation-attachments/types").AttachmentErrorCode
   // Skill chips: only one mentioned employee may receive them, and expansion can fail (skill-expansion.ts).
   | "skill_requires_single_mention"
   | SkillExpansionErrorCode;
@@ -291,10 +294,20 @@ export function registerRoomHandlers({ io, socket, deps }: RegisterRoomHandlersA
     },
 
     async send(payload) {
-      const { roomId, message, skills } = (payload ?? {}) as {
+      const {
+        roomId,
+        message,
+        skills,
+        attachmentIds,
+        attachmentRequestId,
+        attachmentConversation,
+      } = (payload ?? {}) as {
         roomId?: unknown;
         message?: unknown;
         skills?: unknown;
+        attachmentIds?: unknown;
+        attachmentRequestId?: unknown;
+        attachmentConversation?: unknown;
       };
       const id = asString(roomId);
       if (!id) return fail(null, "invalid");
@@ -316,7 +329,16 @@ export function registerRoomHandlers({ io, socket, deps }: RegisterRoomHandlersA
       const content = String(message ?? "")
         .trim()
         .slice(0, MAX_MESSAGE_LENGTH);
-      if (!content && chips.skills.length === 0) return fail(id, "empty");
+      let attachmentSend: ReturnType<typeof parseAttachmentSend> = null;
+      try {
+        attachmentSend = parseAttachmentSend(
+          { attachmentIds, attachmentRequestId, attachmentConversation },
+          { kind: "room", id },
+        );
+      } catch {
+        return fail(id, "attachment_invalid_selection");
+      }
+      if (!content && chips.skills.length === 0 && !attachmentSend) return fail(id, "empty");
 
       // With chips, the message must name exactly one employee — an input error, refused before the
       // cooldown like an empty message — and the plugin must expand it **before** anything is stored:
@@ -354,6 +376,78 @@ export function registerRoomHandlers({ io, socket, deps }: RegisterRoomHandlersA
       }
 
       const senderName = player.characterName || user.nickname;
+      if (attachmentSend) {
+        try {
+          runtime ??= await getRuntime(io, access.room, user.userId);
+          const selectedRuntime = runtime;
+          let saved: Awaited<ReturnType<typeof rooms.appendRoomMessage>> | undefined;
+          await submitAttachmentExecution({
+            ...attachmentSend,
+            userId: user.userId,
+            channelId: access.room.channelId,
+            conversation: { kind: "room", id },
+            messageId: () => saved!.id,
+            accepted: async () => {
+              if (!saved) {
+                saved = await rooms.appendRoomMessage({
+                  roomId: id,
+                  senderKind: "user",
+                  senderId: user.userId,
+                  senderName,
+                  content: stored || "[Attachments]",
+                });
+                broadcastRoomMessage(roomIo, id, saved);
+                if (access.room.kind === "group") await announceActivity(id, saved);
+              }
+            },
+            targets: async () => selectedRuntime?.attachmentTargets(content) ?? [],
+            validate: async () => {
+              const fresh = await resolveAccess(id);
+              if (!fresh.ok) throw new Error("forbidden");
+              if (
+                selectedRuntime &&
+                (await getRuntime(io, fresh.room, user.userId)) !== selectedRuntime
+              )
+                throw new Error("attachment_conflict");
+            },
+            run: async (byNpc, signal, revalidate) => {
+              if (!saved) throw new Error("attachment_conflict");
+              if (!selectedRuntime) return;
+              if (expansion)
+                selectedRuntime.setExpandedMessage(saved.id, expansion.npcId, expansion.text);
+              selectedRuntime.setAttachmentPrompts(
+                saved.id,
+                Object.fromEntries(
+                  Object.entries(byNpc).map(([npcId, files]) => [
+                    npcId,
+                    formatAttachmentManifest(files),
+                  ]),
+                ),
+                revalidate,
+              );
+              const stop = () => selectedRuntime.cancelSource(saved!.id);
+              signal.addEventListener("abort", stop, { once: true });
+              try {
+                if (signal.aborted) return;
+                await selectedRuntime.handleHumanMessage(
+                  senderName,
+                  stored,
+                  socket.id,
+                  saved.id,
+                  socket.data?.userContext ?? null,
+                  readLocaleCookie(socket.handshake?.headers?.cookie),
+                  user.userId,
+                );
+              } finally {
+                signal.removeEventListener("abort", stop);
+              }
+            },
+          });
+        } catch {
+          return fail(id, "attachment_prepare_failed");
+        }
+        return;
+      }
       const saved = await rooms.appendRoomMessage({
         roomId: id,
         senderKind: "user",

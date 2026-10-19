@@ -31,7 +31,20 @@ export async function revokeInterruptedAttachmentBindings(): Promise<BindingClea
       report.pending++;
       continue;
     }
-    if (state?.bindingsRevoked === true || (Array.isArray(state) && state.length === 0)) continue;
+    if (state?.bindingsRevoked === true) continue;
+    if (Array.isArray(state) && state.length === 0) {
+      await db
+        .update(requests)
+        .set({ leaseStateJson: JSON.stringify({ targets: [], bindingsRevoked: true }) })
+        .where(
+          and(
+            eq(requests.id, request.id),
+            eq(requests.status, request.status),
+            eq(requests.leaseStateJson, request.leaseStateJson),
+          ),
+        );
+      continue;
+    }
     if (!state || !Array.isArray(state.targets)) {
       report.pending++;
       continue;

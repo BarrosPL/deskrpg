@@ -30,6 +30,8 @@ const NPC_RESPONSE_MESSAGE_KEYS = {
   file_too_large: "npc.fileTooLarge",
   too_many_files: "npc.tooManyFiles",
   npc_unbound: "npc.unbound",
+  attachment_feature_unavailable: "attachments.unavailable",
+  attachment_prepare_failed: "attachments.failed",
   hermes_image_unsupported: "npc.hermesImageUnsupported",
   // Skill chips (skill-expansion.ts) — the same wording the REST layer uses for these codes.
   plugin_update_required: "errors.pluginUpdateRequired",

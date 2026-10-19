@@ -107,3 +107,27 @@ test("recovery revokes persisted bindings, retries offline failures, and preserv
   assert.deepEqual(await revokeInterruptedAttachmentBindings(), { revoked: 1, pending: 0 });
   assert.equal((await repo.getLink("retained"))?.status, "delete_pending");
 });
+
+test("a crash before any grant does not permanently block original cleanup", async () => {
+  const repo = await import("./repository");
+  const { revokeInterruptedAttachmentBindings } = await import("./cleanup");
+  const context = await repo.createContext({
+    kind: "dm",
+    scopeKey: "no-grants",
+    sourceGatewayId: "gw",
+    sourceChannelId: "ch",
+    ownerUserId: "user",
+  });
+  await repo.createRequest({
+    id: "before-grant",
+    contextId: context.id,
+    senderId: "user",
+    revision: 0,
+    targets: [],
+    fileIds: [],
+  });
+  await repo.recoverInterruptedRequests();
+  assert.equal(await repo.hasActiveRequest(context.id), true);
+  await revokeInterruptedAttachmentBindings();
+  assert.equal(await repo.hasActiveRequest(context.id), false);
+});

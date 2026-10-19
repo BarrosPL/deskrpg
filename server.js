@@ -103,6 +103,9 @@ async function main() {
   // Player/session state lives in socket-handlers.ts.
 
   const { refreshChannelMap } = setupSocketHandlers(io);
+  const { handleAttachmentRequestRpc } = unwrapTsModule(
+    await import("./src/server/conversation-attachment-service.ts"),
+  );
 
   // Internal HTTP endpoints for cross-process communication
   socketHttpServer.on("request", (req, res) => {
@@ -113,6 +116,46 @@ async function main() {
     if (!isInternalRequestAuthorized(req.headers)) {
       res.writeHead(403);
       res.end(JSON.stringify({ ok: false, error: "Forbidden" }));
+      return;
+    }
+
+    if (req.method === "POST" && req.url === "/_internal/rpc") {
+      let body = "";
+      let oversized = false;
+      req.on("data", (chunk) => {
+        if (oversized) return;
+        body += chunk;
+        if (Buffer.byteLength(body) > 16384) {
+          oversized = true;
+          res.writeHead(413);
+          res.end(JSON.stringify({ ok: false, errorCode: "attachment_invalid_selection" }));
+        }
+      });
+      req.on("end", async () => {
+        if (oversized) return;
+        try {
+          const { channelId, method, params } = JSON.parse(body);
+          if (
+            typeof channelId !== "string" ||
+            channelId.length > 128 ||
+            typeof method !== "string" ||
+            !params ||
+            typeof params !== "object"
+          )
+            throw Error("Invalid request");
+          const result = await handleAttachmentRequestRpc(channelId, method, params);
+          res.writeHead(200);
+          res.end(JSON.stringify({ ok: true, result }));
+        } catch (error) {
+          res.writeHead(typeof error?.status === "number" ? error.status : 400);
+          res.end(
+            JSON.stringify({
+              ok: false,
+              errorCode: typeof error?.code === "string" ? error.code : "attachment_prepare_failed",
+            }),
+          );
+        }
+      });
       return;
     }
 

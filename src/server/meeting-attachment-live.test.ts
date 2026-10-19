@@ -41,6 +41,7 @@ test("prepares every participant at staging and re-prepares the original for the
             ]),
           ),
           new AbortController().signal,
+          async () => {},
         );
         input.changed?.({ requestId: input.requestId, state: "done" });
       },
@@ -97,10 +98,9 @@ test("a participant cannot control another participant's failed material", async
 });
 
 test("restarts preparation after a material revision changes without executing stale files", async () => {
-  let runtime: LiveMeetingAttachments;
   let turnPreparations = 0;
   const prompts: string[] = [];
-  runtime = new LiveMeetingAttachments(
+  const runtime = new LiveMeetingAttachments(
     {
       channelId: "c",
       userId: "owner",
@@ -112,7 +112,11 @@ test("restarts preparation after a material revision changes without executing s
     {
       submit: async (input) => {
         input.changed?.({ requestId: input.requestId, state: "preparing" });
-        if (input.messageId.startsWith("meeting-turn-") && ++turnPreparations === 1) {
+        if (
+          typeof input.messageId === "string" &&
+          input.messageId.startsWith("meeting-turn-") &&
+          ++turnPreparations === 1
+        ) {
           await runtime.stage("owner", "second", ["two"], "message-two");
         }
         try {
@@ -135,6 +139,7 @@ test("restarts preparation after a material revision changes without executing s
             })),
           },
           new AbortController().signal,
+          async () => {},
         );
         input.changed?.({ requestId: input.requestId, state: "done" });
       },

@@ -1,13 +1,13 @@
 import "../../test-setup/dom";
 import assert from "node:assert/strict";
 import test from "node:test";
-import { act } from "react";
+import { act, useEffect } from "react";
 import { createRoot } from "react-dom/client";
 import { useConversationAttachments } from "./use-conversation-attachments";
 
 test("uploads originals, retains opaque IDs and restores stored history", async () => {
   const original = globalThis.fetch;
-  let calls: { url: string; init?: RequestInit }[] = [];
+  const calls: { url: string; init?: RequestInit }[] = [];
   globalThis.fetch = async (input, init) => {
     calls.push({ url: String(input), init });
     return new Response(
@@ -40,10 +40,13 @@ test("uploads originals, retains opaque IDs and restores stored history", async 
   };
   let api!: ReturnType<typeof useConversationAttachments>;
   function Harness() {
-    api = useConversationAttachments({
+    const value = useConversationAttachments({
       channelId: "channel",
       conversation: { kind: "room", id: "room" },
     });
+    useEffect(() => {
+      api = value;
+    }, [value]);
     return null;
   }
   const el = document.createElement("div");
@@ -76,7 +79,13 @@ test("capability failure leaves original upload unavailable", async () => {
     new Response(JSON.stringify({ error: "attachment_feature_unavailable" }), { status: 428 });
   let api!: ReturnType<typeof useConversationAttachments>;
   function Harness() {
-    api = useConversationAttachments({ channelId: "c", conversation: { kind: "dm", id: "npc" } });
+    const value = useConversationAttachments({
+      channelId: "c",
+      conversation: { kind: "dm", id: "npc" },
+    });
+    useEffect(() => {
+      api = value;
+    }, [value]);
     return null;
   }
   const root = createRoot(document.createElement("div"));
@@ -105,7 +114,13 @@ test("cancels pending uploads and does not leak selections into another conversa
   };
   let api!: ReturnType<typeof useConversationAttachments>;
   function Harness({ id }: { id: string }) {
-    api = useConversationAttachments({ channelId: "c", conversation: { kind: "room", id } });
+    const value = useConversationAttachments({
+      channelId: "c",
+      conversation: { kind: "room", id },
+    });
+    useEffect(() => {
+      api = value;
+    }, [value]);
     return null;
   }
   const root = createRoot(document.createElement("div"));

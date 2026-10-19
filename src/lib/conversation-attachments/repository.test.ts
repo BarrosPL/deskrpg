@@ -194,3 +194,9 @@ test("restart makes failed requests non-retryable when their in-memory closures 
   await repo.recoverInterruptedRequests();
   assert.equal((await repo.getRequest("failed-restart"))?.status, "outcome_unknown");
 });
+
+test("transport failures map to a valid HTTP error status", async () => {
+  const { AttachmentServiceError } = await import("./access");
+  assert.equal(new AttachmentServiceError(0, "attachment_prepare_failed").status, 502);
+  assert.equal(new AttachmentServiceError(403, "forbidden").status, 403);
+});

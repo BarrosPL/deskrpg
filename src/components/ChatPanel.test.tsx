@@ -65,7 +65,17 @@ function panel(roomState: RoomState, props: Partial<React.ComponentProps<typeof 
   );
 }
 
+function stubAttachmentList() {
+  const fetchForFeature = globalThis.fetch;
+  globalThis.fetch = ((input: RequestInfo | URL, init?: RequestInit) => {
+    if (String(input).includes("/conversation-attachments"))
+      return Promise.resolve(Response.json({ files: [] }));
+    return fetchForFeature(input, init);
+  }) as typeof fetch;
+}
+
 async function mount(node: React.ReactElement): Promise<HTMLElement> {
+  stubAttachmentList();
   const el = document.createElement("div");
   document.body.appendChild(el);
   const root = createRoot(el);
@@ -876,6 +886,7 @@ test("proposal notice — a 409 from the server shows guidance and leaves the bu
 async function mountRerender(
   node: React.ReactElement,
 ): Promise<{ el: HTMLElement; render: (next: React.ReactElement) => Promise<void> }> {
+  stubAttachmentList();
   const el = document.createElement("div");
   document.body.appendChild(el);
   const root = createRoot(el);

@@ -39,7 +39,7 @@ export function useConversationAttachments({
       const response = await fetch(endpoint());
       const data = await response.json();
       if (current !== generation.current) return;
-      if (!response.ok) {
+      if (!response.ok || !Array.isArray(data.files)) {
         setAvailable(false);
         setError(data.error ?? "attachment_prepare_failed");
         return;
@@ -54,7 +54,10 @@ export function useConversationAttachments({
         ),
       ]);
     } catch {
-      if (current === generation.current) setError("attachment_prepare_failed");
+      if (current === generation.current) {
+        setAvailable(false);
+        setError("attachment_prepare_failed");
+      }
     }
   }, [key, endpoint]);
   useEffect(() => {

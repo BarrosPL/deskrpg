@@ -1,3 +1,18 @@
+import {
+  createLiveMeetingAttachments,
+  recoverMeetingAttachmentContexts,
+} from "./meeting-attachment-live";
+import {
+  recoverInterruptedRequests,
+  resetDmAttachmentContext,
+} from "@/lib/conversation-attachments/repository";
+import { runAttachmentCleanup } from "@/lib/conversation-attachments/cleanup";
+import {
+  parseAttachmentSend,
+  submitAttachmentExecution,
+  registerSocketAttachmentRuntime,
+} from "./conversation-attachment-service";
+import { formatAttachmentManifest } from "./conversation-attachment-runtime";
 import { broadcastNpcUpdate } from "./npc-update-broadcast";
 import { mapContentRevision } from "../lib/channel-map-revision";
 import { createChannelMapRefresh } from "./channel-map-refresh";
@@ -66,14 +81,7 @@ import {
   pickHistoryCharacterId,
   type NpcHistoryMessage,
 } from "@/lib/npc-chat-history";
-import {
-  extractFileContent,
-  buildFilePromptSection,
-  buildAttachments,
-  isAllowedFileType,
-  FILE_LIMITS,
-} from "@/lib/file-extractor";
-import type { ExtractedFile, GatewayAttachment } from "@/lib/file-extractor";
+import type { GatewayAttachment } from "@/lib/file-extractor";
 
 const DEBUG_CHAT = process.env.DEBUG_CHAT === "1" || process.env.DEBUG_CHAT === "true";
 function chatLog(...args: unknown[]) {
@@ -602,6 +610,7 @@ async function streamNpcResponse(
   sessionKeyOverride?: string,
   emitEvent?: string,
   signal?: AbortSignal,
+  preparedAdapter?: NpcAdapter,
 ): Promise<string> {
   const { _channelId, sessionKeyPrefix, adapterType, hermesProfileId } = npcConfig;
   const responseEvent = emitEvent || "npc:response";
@@ -623,11 +632,13 @@ async function streamNpcResponse(
   }
 
   if (dispatchKind === "hermes") {
-    const hermesAdapter = await createHermesAdapterForNpc(
-      npcId,
-      userId,
-      deriveHermesContextKey(sessionKey, sessionKeyPrefix || npcId),
-    );
+    const hermesAdapter =
+      preparedAdapter ??
+      (await createHermesAdapterForNpc(
+        npcId,
+        userId,
+        deriveHermesContextKey(sessionKey, sessionKeyPrefix || npcId),
+      ));
     if (!hermesAdapter) {
       emitNpcSystemResponse(socket, npcId, "npc_unbound");
       return "";
@@ -688,6 +699,7 @@ async function streamNpcResponse(
       );
       return response || "";
     } catch (err) {
+      if (preparedAdapter) throw err;
       console.error("[npc] Hermes adapter error for " + npcId + ":", err);
       emitNpcSystemResponse(socket, npcId, gatewayFailureMessageCode(err));
       return "";
@@ -1119,6 +1131,16 @@ async function isChannelOwner(channelId: string, userId: string): Promise<boolea
 // ---------------------------------------------------------------------------
 
 export function setupSocketHandlers(io: Server) {
+  const attachmentRecovery = Promise.all([
+    recoverInterruptedRequests(),
+    recoverMeetingAttachmentContexts(),
+  ]).then(() => runAttachmentCleanup());
+  registerSocketAttachmentRuntime(attachmentRecovery);
+  void attachmentRecovery.catch(() => {});
+  const attachmentCleanupTimer = setInterval(() => {
+    void attachmentRecovery.then(() => runAttachmentCleanup()).catch(() => {});
+  }, 60_000);
+  attachmentCleanupTimer.unref();
   emitToUserFn = (userId, event, payload) => io.to(userRoom(userId)).emit(event, payload);
   toolApprovals = createToolApprovalRegistry({
     emitToUser: (userId, event, payload) => io.to(userRoom(userId)).emit(event, payload),
@@ -1629,6 +1651,9 @@ export function setupSocketHandlers(io: Server) {
         message: string;
         characterId?: string;
         sourceMessageId?: string;
+        attachmentIds?: string[];
+        attachmentRequestId?: string;
+        attachmentConversation?: import("@/lib/conversation-attachments/types").ConversationRef;
         files?: Array<{ name: string; type: string; size: number; data: ArrayBuffer }>;
         /** Skill chips (`/skill`), at most MAX_SKILL_CHIPS. Expanded through the plugin before Hermes sees them. */
         skills?: string[];
@@ -1645,7 +1670,12 @@ export function setupSocketHandlers(io: Server) {
 
         // Validate. Without chips the message is required, as before; chips alone are a message too.
         if (!npcId) return;
-        if (data.skills === undefined && (!message || typeof message !== "string")) return;
+        if (
+          data.skills === undefined &&
+          !data.attachmentIds?.length &&
+          (!message || typeof message !== "string")
+        )
+          return;
         if (typeof message !== "string" && message !== undefined && message !== null) return;
         const chips =
           data.skills === undefined
@@ -1660,7 +1690,16 @@ export function setupSocketHandlers(io: Server) {
         const trimmed = chips.skills.length
           ? formatSkillChipLine(chips.skills, instruction)
           : instruction;
-        if (!trimmed && (!files || files.length === 0)) return;
+        if (files?.length) {
+          socket.emit("npc:response", {
+            npcId,
+            chunk: "",
+            done: true,
+            messageCode: "attachment_feature_unavailable",
+          });
+          return;
+        }
+        if (!trimmed && !data.attachmentIds?.length) return;
 
         // Rate limit
         const now = Date.now();
@@ -1692,6 +1731,138 @@ export function setupSocketHandlers(io: Server) {
           typeof data.sourceMessageId === "string" && data.sourceMessageId.length <= 100
             ? data.sourceMessageId
             : crypto.randomUUID();
+        if (data.attachmentIds?.length) {
+          try {
+            const conversation = { kind: "dm" as const, id: npcId };
+            const send = parseAttachmentSend(data, conversation)!;
+            const sessionKey = `${npcConfig.sessionKeyPrefix || npcId}-dm-${user.userId}`;
+            const adapter = await createHermesAdapterForNpc(
+              npcId,
+              user.userId,
+              deriveHermesContextKey(sessionKey, npcConfig.sessionKeyPrefix || npcId),
+            );
+            if (!adapter) throw new Error("attachment_feature_unavailable");
+            const scope = dmResponseScope(user.userId, historyCharacterId, npcId);
+            await socket.join(scope);
+            const tracker = getDmResponseTracker(io, scope);
+            let sourceStored = false;
+            await submitAttachmentExecution({
+              ...send,
+              userId: user.userId,
+              channelId: npcConfig._channelId,
+              conversation,
+              messageId: send.requestId,
+              accepted: async () => {
+                if (!sourceStored) {
+                  await appendNpcHistoryMessage(
+                    historyCharacterId,
+                    npcId,
+                    trimmed || "[Attachments]",
+                    "player",
+                    { id: send.requestId },
+                  );
+                  sourceStored = true;
+                }
+              },
+              targets: async () => [{ npcId, adapter, sessionKey }],
+              validate: async () => {
+                if (
+                  dmResetting.has(`${user.userId}:${npcId}`) ||
+                  !(await getSocketChannelParticipationAccess(npcConfig._channelId, user.userId))
+                    ?.access.allowed
+                )
+                  throw new Error("attachment_conflict");
+              },
+              changed: (attachmentRequest) =>
+                io
+                  .to(scope)
+                  .emit("npc:response", { npcId, chunk: "", done: false, attachmentRequest }),
+              run: async (byNpc, attachmentSignal, revalidate) => {
+                let response = "";
+                let runError: unknown;
+                await runTrackedDm({
+                  tracker,
+                  queue: dmResponseQueue,
+                  queueKey: `${user.userId}:${npcId}`,
+                  identity: {
+                    requestId: send.requestId,
+                    sourceMessageId: send.requestId,
+                    npcId,
+                    npcName: npcConfig._name || npcId,
+                  },
+                  work: async (capture, isActive, signal) => {
+                    try {
+                      let body = trimmed;
+                      if (chips.skills.length) {
+                        const expanded = await skillExpansion.expand({
+                          channelId: npcConfig._channelId,
+                          npcId,
+                          skills: chips.skills,
+                          instruction,
+                        });
+                        if (!expanded.ok) throw new Error(expanded.errorCode);
+                        body = expanded.message;
+                      }
+                      const responseSocket = new Proxy(socket, {
+                        get(target, property) {
+                          if (property === "emit")
+                            return (event: string, payload: Record<string, unknown>) => {
+                              if (isActive()) {
+                                capture(event, payload);
+                                io.to(scope).emit(event, {
+                                  ...payload,
+                                  responseRequestId: send.requestId,
+                                });
+                              }
+                              return target;
+                            };
+                          const value = Reflect.get(target, property, target);
+                          return typeof value === "function" ? value.bind(target) : value;
+                        },
+                      });
+                      await revalidate();
+                      response = await streamNpcResponse(
+                        responseSocket,
+                        npcId,
+                        npcConfig,
+                        user.userId,
+                        body + formatAttachmentManifest(byNpc[npcId] ?? []),
+                        undefined,
+                        undefined,
+                        undefined,
+                        signal ? AbortSignal.any([signal, attachmentSignal]) : attachmentSignal,
+                        adapter,
+                      );
+                      if (!response.trim()) throw new Error("empty_response");
+                      await appendNpcHistoryMessage(historyCharacterId, npcId, response, "npc", {
+                        id: send.requestId,
+                        responseRequestId: send.requestId,
+                      });
+                      return response;
+                    } catch (error) {
+                      runError = error;
+                      throw error;
+                    }
+                  },
+                });
+                if (runError) throw runError;
+                if (!response) throw new Error("cancelled");
+              },
+            });
+          } catch (error) {
+            socket.emit("npc:response", {
+              npcId,
+              chunk: "",
+              done: true,
+              messageCode: "attachment_prepare_failed",
+              errorCode:
+                typeof (error as { code?: unknown })?.code === "string"
+                  ? (error as { code: string }).code
+                  : "attachment_prepare_failed",
+            });
+          }
+          return;
+        }
         const requestId = crypto.randomUUID();
         const scope = dmResponseScope(user.userId, historyCharacterId, npcId);
         const queueKey = `${user.userId}:${npcId}`;
@@ -1730,43 +1901,6 @@ export function setupSocketHandlers(io: Server) {
                   return typeof value === "function" ? value.bind(target) : value;
                 },
               });
-              // --- File processing (text-based files only) ---
-              let extractedFiles: ExtractedFile[] = [];
-              let fileAttachments: GatewayAttachment[] | undefined;
-
-              if (files && files.length > 0) {
-                if (files.length > FILE_LIMITS.maxFileCount) {
-                  emitNpcSystemResponse(responseSocket, npcId, "too_many_files");
-                  return;
-                }
-                for (const f of files) {
-                  if (f.size > FILE_LIMITS.maxFileSize) {
-                    emitNpcSystemResponse(responseSocket, npcId, "file_too_large");
-                    return;
-                  }
-                  if (!isAllowedFileType(f.name, f.type)) {
-                    emitNpcSystemResponse(responseSocket, npcId, "unsupported_file_type");
-                    return;
-                  }
-                }
-                extractedFiles = await Promise.all(
-                  files.map((f) =>
-                    extractFileContent(Buffer.from(f.data), f.name, f.type, socketLocale(socket)),
-                  ),
-                );
-                fileAttachments = buildAttachments(extractedFiles);
-                chatLog(
-                  "  extracted:",
-                  extractedFiles
-                    .map(
-                      (f) =>
-                        `${f.name}(text=${f.textContent?.length ?? 0}, img=${f.imageBase64 ? (f.imageBase64.length / 1024).toFixed(0) + "KB" : "-"}, trunc=${f.truncated})`,
-                    )
-                    .join(", "),
-                );
-              }
-
-              const fileSection = buildFilePromptSection(extractedFiles, socketLocale(socket));
               if (!isActive()) return;
               // Chips go to Hermes as the message its TUI would build for `/skill …`; the stored line
               // keeps the chips. A failed expansion ends the turn here — Hermes is never called with
@@ -1786,14 +1920,11 @@ export function setupSocketHandlers(io: Server) {
                 }
                 body = expanded.message;
               }
-              const messageToSend = body + fileSection;
+              const messageToSend = body;
 
               // Stream response via OpenClaw
               chatLog(
                 `  → gateway (${npcConfig._name}): msgLen=${messageToSend.length}(${(messageToSend.length / 1024).toFixed(0)}KB)`,
-                fileAttachments
-                  ? `+${fileAttachments.length} att(${fileAttachments.map((a) => `${a.fileName}:${(a.content.length / 1024).toFixed(0)}KB`).join(",")})`
-                  : "",
               );
               const response = await streamNpcResponse(
                 responseSocket,
@@ -1801,7 +1932,7 @@ export function setupSocketHandlers(io: Server) {
                 npcConfig,
                 user.userId,
                 messageToSend,
-                fileAttachments,
+                undefined,
                 undefined,
                 undefined,
                 signal,
@@ -1943,6 +2074,8 @@ export function setupSocketHandlers(io: Server) {
         await dmResponseQueue.idle(queueKey);
         dmResponseTrackers.delete(scope);
         npcChatHistory.delete(npcHistoryKey(characterId, npcId));
+        const config = await getNpcConfig(npcId, socketLocale(socket));
+        if (config) await resetDmAttachmentContext(user.userId, config._channelId, npcId);
         await clearNpcChatHistory(db, { chatMessages }, { characterId, npcId });
         socket.emit("npc:response-snapshot", { npcId, responses: [] });
       } catch (err) {
@@ -2139,6 +2272,10 @@ export function setupSocketHandlers(io: Server) {
             !!meetingRooms.get(channelId)?.participants.has(socket.id) &&
             players.get(socket.id)?.mapId === channelId
           );
+        },
+        createAttachments: async (input) => {
+          await attachmentRecovery;
+          return createLiveMeetingAttachments(input);
         },
         generateMeetingSummary,
         persistMeetingMinutes,

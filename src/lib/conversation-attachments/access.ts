@@ -15,6 +15,7 @@ export class AttachmentServiceError extends Error {
     public code: string,
   ) {
     super(code);
+    this.status = status >= 400 && status <= 599 ? status : 502;
   }
 }
 export type AttachmentAction = "read" | "upload" | "prepare" | "delete";

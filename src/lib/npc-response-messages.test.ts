@@ -29,6 +29,8 @@ const TEST_CODES: Record<NpcResponseMessageCode, string> = {
   file_too_large: "npc.fileTooLarge",
   too_many_files: "npc.tooManyFiles",
   npc_unbound: "npc.unbound",
+  attachment_feature_unavailable: "attachments.unavailable",
+  attachment_prepare_failed: "attachments.failed",
   hermes_image_unsupported: "npc.hermesImageUnsupported",
   plugin_update_required: "errors.pluginUpdateRequired",
   plugin_not_loaded: "errors.pluginNotLoaded",
