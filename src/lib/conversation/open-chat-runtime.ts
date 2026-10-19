@@ -114,6 +114,7 @@ export class OpenChatRuntime {
    * turn or into history.
    */
   private readonly attachmentPrompts = new Map<string, Record<string, string>>();
+  private readonly attachmentGuards = new Map<string, () => Promise<void>>();
   private readonly expansions = new Map<string, { npcId: string; text: string }>();
 
   constructor(deps: OpenChatDeps, callbacks: OpenChatCallbacks) {
@@ -152,11 +153,17 @@ export class OpenChatRuntime {
     if (this.disposed) return [];
     const mentioned = this.mentionedParticipants(text);
     const ids = this.deps.selectResponders ? this.deps.selectResponders(mentioned) : mentioned;
-    return this.deps.participants.filter(p => ids.includes(p.npcId));
+    return this.deps.participants.filter((p) => ids.includes(p.npcId));
   }
 
-  setAttachmentPrompts(sourceMessageId: string, prompts: Record<string, string>): void {
+  setAttachmentPrompts(
+    sourceMessageId: string,
+    prompts: Record<string, string>,
+    validate?: () => Promise<void>,
+  ): void {
     this.attachmentPrompts.set(sourceMessageId, prompts);
+    if (validate) this.attachmentGuards.set(sourceMessageId, validate);
+    else this.attachmentGuards.delete(sourceMessageId);
   }
 
   /**
@@ -171,6 +178,7 @@ export class OpenChatRuntime {
   dispose(): void {
     this.expansions.clear();
     this.attachmentPrompts.clear();
+    this.attachmentGuards.clear();
     if (this.disposed) return;
     this.disposed = true;
     this.callbacks.onDisposed?.();
@@ -224,6 +232,7 @@ export class OpenChatRuntime {
     } finally {
       this.expansions.delete(sourceMessageId);
       this.attachmentPrompts.delete(sourceMessageId);
+      this.attachmentGuards.delete(sourceMessageId);
     }
   }
 
@@ -342,13 +351,22 @@ export class OpenChatRuntime {
         context.callerContext,
         context.callerLocale,
       );
+      // Authorization may change while this turn waits for its per-NPC queue slot.
+      await this.attachmentGuards.get(context.sourceMessageId)?.();
+      if (this.disposed || stopped()) {
+        this.callbacks.onTurnCancelled?.(npcId, context);
+        return;
+      }
       const outcome = await withStreamDiagnosticRequest(context.requestId, () =>
-        runtime.speakWithPrompt(prompt + (this.attachmentPrompts.get(context.sourceMessageId)?.[npcId] ?? ""), {
-          onChunk: (chunk) => {
-            if (!this.disposed && !closed && !stopped())
-              this.callbacks.onTurnChunk?.(npcId, chunk, context);
+        runtime.speakWithPrompt(
+          prompt + (this.attachmentPrompts.get(context.sourceMessageId)?.[npcId] ?? ""),
+          {
+            onChunk: (chunk) => {
+              if (!this.disposed && !closed && !stopped())
+                this.callbacks.onTurnChunk?.(npcId, chunk, context);
+            },
           },
-        }),
+        ),
       );
       closed = true;
       if (this.disposed) return;

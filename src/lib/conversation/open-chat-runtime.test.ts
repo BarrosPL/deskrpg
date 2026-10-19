@@ -696,3 +696,40 @@ test("an expansion registered for one NPC is not shown to another NPC answering 
   assert.match(promptsB[0], /\/research 봐 줘/);
   rt.dispose();
 });
+
+test("queued attachment turns revalidate access immediately before adapter execution", async () => {
+  const gate = gated("complete");
+  let calls = 0;
+  const adapter: NpcAdapter = {
+    ...gate.adapter,
+    execute: async (options) => {
+      calls++;
+      return gate.adapter.execute(options);
+    },
+  };
+  const rt = new OpenChatRuntime(
+    { participants: [p("a", "Ada", adapter)], recent: () => [], turnTimeout: TIMEOUT },
+    {},
+  );
+  const first = rt.handleHumanMessage("Owner", "@[Ada] first", null, "first");
+  await until(gate.started);
+  let allowed = true;
+  let validations = 0;
+  rt.setAttachmentPrompts("second", { a: "original files" }, async () => {
+    validations++;
+    if (!allowed) throw new Error("forbidden");
+  });
+  const second = rt.handleHumanMessage("Member", "@[Ada] second", null, "second");
+  const rejected = assert.rejects(second, /forbidden/);
+  assert.equal(validations, 0);
+  allowed = false;
+  gate.release();
+  await first;
+  await rejected;
+  assert.equal(validations, 1);
+  assert.equal(calls, 1);
+  // Completed source guards cannot leak into a later ordinary turn.
+  await rt.handleHumanMessage("Owner", "@[Ada] ordinary", null, "second");
+  assert.equal(calls, 2);
+  assert.equal(validations, 1);
+});
