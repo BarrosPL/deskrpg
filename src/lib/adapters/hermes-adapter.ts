@@ -20,11 +20,27 @@ export class HermesAdapter implements NpcAdapter {
 
   private readonly client: HermesClient;
   private sessionId: string | null;
+  private preparingSession: Promise<string> | null = null;
+  private attachmentSessionId: string | null = null;
   private lastRunId: string | null = null;
 
   constructor(client: HermesClient, opts?: { sessionId?: string }) {
     this.client = client;
     this.sessionId = opts?.sessionId ?? null;
+  }
+
+  async ensureSession(sessionKey: string): Promise<string> {
+    if (!this.preparingSession) {
+      this.preparingSession = (async () => {
+        if (!this.sessionId) this.sessionId = (await this.client.createSession(sessionKey)).sessionId;
+        this.attachmentSessionId = this.sessionId;
+        return this.sessionId;
+      })().catch((error) => {
+        this.preparingSession = null;
+        throw error;
+      });
+    }
+    return this.preparingSession;
   }
 
   private relay(options: AdapterExecuteOptions) {
@@ -85,6 +101,7 @@ export class HermesAdapter implements NpcAdapter {
     if (options.multiParty) {
       const { runId } = await this.client.startRun({
         input: options.prompt,
+        sessionId: this.attachmentSessionId ?? undefined,
         conversationHistory: options.conversationHistory ?? [],
         instructions: options.instructions,
         sessionKey: options.sessionKey,
@@ -111,6 +128,8 @@ export class HermesAdapter implements NpcAdapter {
       onEvent,
     });
     this.sessionId = result.sessionId;
+    this.preparingSession = null;
+    if (this.attachmentSessionId) this.attachmentSessionId = result.sessionId;
     this.lastRunId = result.runId;
 
     return { response: result.text, session: { sessionRef: result.sessionId } };

@@ -113,6 +113,7 @@ export class OpenChatRuntime {
    * cache and the stored line keep the chips (`/skill …`) — the skill body never leaks to a colleague's
    * turn or into history.
    */
+  private readonly attachmentPrompts = new Map<string, Record<string, string>>();
   private readonly expansions = new Map<string, { npcId: string; text: string }>();
 
   constructor(deps: OpenChatDeps, callbacks: OpenChatCallbacks) {
@@ -147,6 +148,17 @@ export class OpenChatRuntime {
     return parseAllMentions(text, this.participantsView(), null);
   }
 
+  attachmentTargets(text: string): EngineParticipant[] {
+    if (this.disposed) return [];
+    const mentioned = this.mentionedParticipants(text);
+    const ids = this.deps.selectResponders ? this.deps.selectResponders(mentioned) : mentioned;
+    return this.deps.participants.filter(p => ids.includes(p.npcId));
+  }
+
+  setAttachmentPrompts(sourceMessageId: string, prompts: Record<string, string>): void {
+    this.attachmentPrompts.set(sourceMessageId, prompts);
+  }
+
   /**
    * Registers the plugin-expanded message for `sourceMessageId`, to replace that line in the prompt of
    * `npcId`'s turn on it. Call before `handleHumanMessage`; the entry is dropped once that message has
@@ -158,6 +170,7 @@ export class OpenChatRuntime {
 
   dispose(): void {
     this.expansions.clear();
+    this.attachmentPrompts.clear();
     if (this.disposed) return;
     this.disposed = true;
     this.callbacks.onDisposed?.();
@@ -210,6 +223,7 @@ export class OpenChatRuntime {
       );
     } finally {
       this.expansions.delete(sourceMessageId);
+      this.attachmentPrompts.delete(sourceMessageId);
     }
   }
 
@@ -329,7 +343,7 @@ export class OpenChatRuntime {
         context.callerLocale,
       );
       const outcome = await withStreamDiagnosticRequest(context.requestId, () =>
-        runtime.speakWithPrompt(prompt, {
+        runtime.speakWithPrompt(prompt + (this.attachmentPrompts.get(context.sourceMessageId)?.[npcId] ?? ""), {
           onChunk: (chunk) => {
             if (!this.disposed && !closed && !stopped())
               this.callbacks.onTurnChunk?.(npcId, chunk, context);

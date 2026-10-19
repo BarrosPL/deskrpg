@@ -311,11 +311,13 @@ export class HermesClient {
 
   async startRun(args: {
     input: string;
+    sessionId?: string;
     conversationHistory?: Array<{ role: string; content: string }>;
     instructions?: string;
     sessionKey?: string;
   }): Promise<{ runId: string }> {
     const body: Record<string, unknown> = { input: args.input };
+    if (args.sessionId) body.session_id = args.sessionId;
     if (args.conversationHistory?.length) body.conversation_history = args.conversationHistory;
     if (args.instructions) body.instructions = args.instructions;
 

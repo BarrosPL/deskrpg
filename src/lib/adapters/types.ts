@@ -80,6 +80,9 @@ export interface NpcAdapter {
     session: AdapterSessionInfo;
   }>;
 
+  /** Establishes the trusted runtime identity before original files are prepared. */
+  ensureSession?(sessionKey: string): Promise<string>;
+
   abort?(sessionKey: string): Promise<void>;
   steer?(text: string): Promise<void>;
 
