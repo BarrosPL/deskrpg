@@ -14,7 +14,13 @@ export type PrepareRequest = {
   fileIds: string[];
   targets: PrepareTarget[];
 };
-export type PreparedFile = FileMeta & { agentPath: string; leaseId: string; expiresAt: string };
+export type PreparedFile = FileMeta & {
+  /** Hermes tool identifier; absent only in requests persisted before this field existed. */
+  pluginFileId?: string;
+  agentPath: string;
+  leaseId: string;
+  expiresAt: string;
+};
 export type PrepareResult =
   | { ok: true; revision: number; byNpc: Record<string, PreparedFile[]> }
   | {

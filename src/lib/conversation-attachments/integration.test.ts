@@ -227,7 +227,16 @@ test("original attachment services enforce conversation privacy and prepare veri
   await t.test("verified preparation links the original and deletion hides it", async () => {
     const prepared = await prepareAttachments(access, request);
     assert.equal(prepared.ok, true);
-    if (prepared.ok) assert.equal(prepared.byNpc[npc.id][0].sha256, file.sha256);
+    if (prepared.ok) {
+      const executionFile = prepared.byNpc[npc.id][0];
+      assert.equal(executionFile.sha256, file.sha256);
+      assert.equal(executionFile.id, file.id);
+      assert.notEqual(executionFile.pluginFileId, file.id);
+      assert.ok(files.has(executionFile.pluginFileId!));
+      assert.ok(
+        !JSON.stringify(await listAttachments(access)).includes(executionFile.pluginFileId!),
+      );
+    }
     await linkAttachments(access, [file.id], "message-1");
     assert.equal((await getLink(file.id))?.messageId, "message-1");
     assert.deepEqual(linked, ["message-1"]);

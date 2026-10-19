@@ -167,3 +167,24 @@ test("retry acknowledges admission before a long preparation finishes", async ()
   await done;
   assert.equal(state, "done");
 });
+
+test("tool manifests use Hermes original IDs rather than browser reference IDs", () => {
+  const file = {
+    id: "browser-reference",
+    pluginFileId: "hermes-original",
+    name: "original.pdf",
+    mimeType: "application/pdf",
+    bytes: 4,
+    sha256: "abc",
+    agentPath: "/cache/original.pdf",
+    leaseId: "private-lease",
+    expiresAt: "later",
+  };
+  const manifest = formatAttachmentManifest([file]);
+  assert.ok(manifest.includes('"id":"hermes-original"'));
+  assert.ok(!manifest.includes("browser-reference"));
+  assert.ok(!manifest.includes("private-lease"));
+  const legacy = formatAttachmentManifest([{ ...file, pluginFileId: undefined }]);
+  assert.ok(!legacy.includes('"id":'));
+  assert.ok(legacy.includes('"path":"/cache/original.pdf"'));
+});

@@ -157,7 +157,12 @@ export async function prepareAttachments(
           }),
         );
         // Retain the lease before verification so rejected bytes are also released.
-        byNpc[target.npcId].push({ ...prepared, id: file.id, name: file.name });
+        byNpc[target.npcId].push({
+          ...prepared,
+          id: file.id,
+          pluginFileId: file.pluginFileId,
+          name: file.name,
+        });
         if (prepared.sha256 !== file.sha256 || prepared.bytes !== file.bytes)
           throw new AttachmentServiceError(422, "attachment_checksum_mismatch");
       } catch (error) {
