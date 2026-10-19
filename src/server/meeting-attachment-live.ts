@@ -1,6 +1,7 @@
 import { db, conversationAttachmentContexts } from "@/db";
 import { and, eq } from "drizzle-orm";
 import { randomUUID } from "node:crypto";
+import { replaceExecute } from "@/lib/adapters/replace-execute";
 import type { AdapterExecuteOptions, NpcAdapter } from "@/lib/adapters/types";
 import {
   createMeetingContext,
@@ -102,6 +103,8 @@ export class LiveMeetingAttachments {
         messageId,
         targets: async () => [...this.targets.values()],
         validate: async () => {
+          if (fileIds.some((id) => !this.barrier.requestFiles(requestId).includes(id)))
+            throw new AttachmentServiceError(409, "attachment_conflict");
           if (!(await this.authorize(actorId, "upload")))
             throw new AttachmentServiceError(403, "forbidden");
         },
@@ -131,7 +134,8 @@ export class LiveMeetingAttachments {
       this.barrier.exclude(id, fileIds);
       for (const fileId of fileIds) await this.services.updateLink(fileId, { status: "excluded" });
       const remaining = this.barrier.requestFiles(id);
-      if (await this.services.getRequest(id))
+      const request = await this.services.getRequest(id);
+      if (request && !["done", "cancelled", "outcome_unknown"].includes(request.status))
         await this.services.control(access, id, "cancel", true);
       this.barrier.change(id, "cancelled");
       if (remaining.length) {
@@ -160,68 +164,77 @@ export class LiveMeetingAttachments {
       const abort = new AbortController();
       this.executions.add(abort);
       try {
-        await this.barrier.wait(abort.signal);
-        const revision = this.barrier.revision;
-        const files = this.barrier.files();
-        if (!files.length) return adapter.execute(options);
-        let result: Awaited<ReturnType<NpcAdapter["execute"]>> | undefined;
-        const next = async (offset: number, prepared: PreparedFile[]): Promise<void> => {
-          if (offset >= files.length) {
-            if (abort.signal.aborted || revision !== this.barrier.revision)
-              throw new Error("attachment_conflict");
-            result = await adapter.execute({
-              ...options,
-              prompt: options.prompt + formatAttachmentManifest(prepared),
+        while (!abort.signal.aborted) {
+          await this.barrier.wait(abort.signal);
+          let stale = false;
+          const revision = this.barrier.revision;
+          const files = this.barrier.files();
+          if (!files.length) return adapter.execute(options);
+          let result: Awaited<ReturnType<NpcAdapter["execute"]>> | undefined;
+          const next = async (offset: number, prepared: PreparedFile[]): Promise<void> => {
+            if (offset >= files.length) {
+              if (revision !== this.barrier.revision) {
+                stale = true;
+                return;
+              }
+              if (abort.signal.aborted) throw new Error("meeting_aborted");
+              result = await adapter.execute({
+                ...options,
+                prompt: options.prompt + formatAttachmentManifest(prepared),
+              });
+              return;
+            }
+            const requestId = randomUUID();
+            this.barrier.stage(requestId, files.slice(offset, offset + 3));
+            await this.services.submit({
+              signal: abort.signal,
+              userId: this.input.userId,
+              channelId: this.channelId,
+              conversation: this.conversation,
+              requestId,
+              fileIds: files.slice(offset, offset + 3),
+              messageId: `meeting-turn-${requestId}`,
+              targets: async () => [{ npcId, adapter, sessionKey: options.sessionKey }],
+              validate: async () => {
+                if (revision !== this.barrier.revision) stale = true;
+                if (!this.active || abort.signal.aborted || stale)
+                  throw new AttachmentServiceError(409, "attachment_conflict");
+              },
+              run: async (byNpc, signal) => {
+                if (signal.aborted) throw new Error("meeting_aborted");
+                await next(offset + 3, [...prepared, ...(byNpc[npcId] ?? [])]);
+              },
+              changed: (view) => {
+                this.barrier.change(requestId, stale ? "cancelled" : view.state);
+                if (view.state === "failed" && !stale) this.input.changed(view);
+              },
             });
-            return;
-          }
-          const requestId = randomUUID();
-          this.barrier.stage(requestId, files.slice(offset, offset + 3));
-          await this.services.submit({
-            userId: this.input.userId,
-            channelId: this.channelId,
-            conversation: this.conversation,
-            requestId,
-            fileIds: files.slice(offset, offset + 3),
-            messageId: `meeting-turn-${requestId}`,
-            targets: async () => [{ npcId, adapter, sessionKey: options.sessionKey }],
-            validate: async () => {
-              if (!this.active || abort.signal.aborted || revision !== this.barrier.revision)
-                throw new AttachmentServiceError(409, "attachment_conflict");
-            },
-            run: async (byNpc, signal) => {
-              if (signal.aborted) throw new Error("meeting_aborted");
-              await next(offset + 3, [...prepared, ...(byNpc[npcId] ?? [])]);
-            },
-            changed: (view) => {
-              this.barrier.change(requestId, view.state);
-              if (view.state === "failed") this.input.changed(view);
-            },
-          });
-          // Keep earlier batches leased while a later batch waits for explicit retry.
-          if (!result) await this.barrier.waitRequest(requestId, abort.signal);
-        };
-        await next(0, []);
-        if (!result) await this.barrier.wait(abort.signal);
-        if (!result) throw new AttachmentServiceError(502, "attachment_prepare_failed");
-        return result;
+            if (stale) {
+              this.barrier.change(requestId, "cancelled");
+              return;
+            }
+            // Keep earlier batches leased while a later batch waits for explicit retry.
+            if (!result) await this.barrier.waitRequest(requestId, abort.signal);
+          };
+          await next(0, []);
+          if (stale) continue;
+          if (!result) await this.barrier.wait(abort.signal);
+          if (!result) throw new AttachmentServiceError(502, "attachment_prepare_failed");
+          return result;
+        }
+        throw new Error("meeting_aborted");
       } finally {
         this.executions.delete(abort);
       }
     };
-    return {
-      type: adapter.type,
-      execute,
-      ensureSession: adapter.ensureSession?.bind(adapter),
-      abort: async (key) => {
-        for (const c of this.executions) c.abort();
-        await adapter.abort?.(key);
-      },
-      testConnection: adapter.testConnection.bind(adapter),
-      getConfigSchema: adapter.getConfigSchema?.bind(adapter),
-      resetSession: adapter.resetSession?.bind(adapter),
+    const wrapped = replaceExecute(adapter, execute);
+    wrapped.abort = async (key) => {
+      for (const c of this.executions) c.abort();
+      await adapter.abort?.(key);
     };
+    return wrapped;
   }
+
   async archive(minutesId: string | null) {
     this.stop();
     await this.ending;
