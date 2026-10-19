@@ -1,5 +1,18 @@
 // English translations (default/fallback)
 const en: Record<string, string> = {
+  "errors.attachment_not_found": "Original file not found.",
+  "errors.attachment_too_large": "Each original file must be at most 5 MiB.",
+  "errors.attachment_count_exceeded": "Select at most 3 files per message.",
+  "errors.attachment_checksum_mismatch": "The file integrity check failed.",
+  "errors.attachment_conflict": "The attachment request changed. Refresh and try again.",
+  "errors.attachment_backend_unsupported": "This runtime does not support original files.",
+  "errors.attachment_prepare_failed":
+    "Could not prepare the original file. Retry or cancel the request.",
+  "errors.attachment_quota_exceeded": "Original file storage is full.",
+  "errors.attachment_feature_unavailable": "Update the gateway plugin to use original files.",
+  "errors.attachment_invalid_file": "This file type or name is not supported.",
+  "errors.attachment_invalid_selection": "The selected files are invalid.",
+
   "attachments.exclude": "Exclude from meeting",
 
   "attachments.request.pending": "Waiting to deliver files",

@@ -1,5 +1,19 @@
 // Korean translations
 const ko: Record<string, string> = {
+  "errors.attachment_not_found": "원본 파일을 찾을 수 없습니다.",
+  "errors.attachment_too_large": "원본 파일은 각각 5 MiB 이하여야 합니다.",
+  "errors.attachment_count_exceeded": "메시지당 최대 3개 파일을 선택하세요.",
+  "errors.attachment_checksum_mismatch": "파일 무결성 검증에 실패했습니다.",
+  "errors.attachment_conflict": "첨부 요청이 변경됐습니다. 새로고침 후 다시 시도하세요.",
+  "errors.attachment_backend_unsupported": "이 실행 환경은 원본 파일을 지원하지 않습니다.",
+  "errors.attachment_prepare_failed":
+    "원본 파일 준비에 실패했습니다. 재시도하거나 요청을 취소하세요.",
+  "errors.attachment_quota_exceeded": "원본 파일 저장 공간이 가득 찼습니다.",
+  "errors.attachment_feature_unavailable":
+    "원본 파일을 사용하려면 게이트웨이 플러그인을 업데이트하세요.",
+  "errors.attachment_invalid_file": "지원하지 않는 파일 형식이나 이름입니다.",
+  "errors.attachment_invalid_selection": "선택한 파일이 올바르지 않습니다.",
+
   "attachments.exclude": "회의에서 제외",
 
   "attachments.request.pending": "파일 전달 대기 중",

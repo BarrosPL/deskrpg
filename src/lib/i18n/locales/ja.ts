@@ -1,5 +1,18 @@
 // Japanese translations
 const ja: Record<string, string> = {
+  "errors.attachment_not_found": "原本が見つかりません。",
+  "errors.attachment_too_large": "各原本は5 MiB以下にしてください。",
+  "errors.attachment_count_exceeded": "メッセージごとに最大3ファイルを選択してください。",
+  "errors.attachment_checksum_mismatch": "ファイルの整合性検証に失敗しました。",
+  "errors.attachment_conflict": "添付リクエストが変更されました。更新して再試行してください。",
+  "errors.attachment_backend_unsupported": "この実行環境は原本に対応していません。",
+  "errors.attachment_prepare_failed": "原本の準備に失敗しました。再試行または取消してください。",
+  "errors.attachment_quota_exceeded": "原本の保存領域がいっぱいです。",
+  "errors.attachment_feature_unavailable":
+    "原本を使うにはゲートウェイプラグインを更新してください。",
+  "errors.attachment_invalid_file": "このファイル形式または名前は対応していません。",
+  "errors.attachment_invalid_selection": "選択されたファイルは無効です。",
+
   "attachments.exclude": "会議から除外",
 
   "attachments.request.pending": "ファイル送信待ち",

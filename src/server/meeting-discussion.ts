@@ -1,3 +1,5 @@
+import type { LiveMeetingAttachments, MeetingAttachmentInput } from "./meeting-attachment-live";
+import { parseAttachmentSend } from "./conversation-attachment-service";
 import type { MeetingDiscussionState } from "../lib/meeting-discussion-state";
 import { describeMeetingFailure } from "../lib/meeting-error";
 import type { MeetingSpatialCoordinator } from "./meeting-spatial-coordinator";
@@ -49,6 +51,7 @@ type MeetingMessage = {
 };
 
 type MeetingPlayer = {
+  userId?: string;
   characterName?: string | null;
 };
 
@@ -119,7 +122,8 @@ type MeetingBrokerConfig = {
   /** IANA timezone the minutes are written in (the channel's Hermes). Omitted means UTC, named as such. */
   timeZone?: string | null;
   /** Wraps each participant's adapter (live tool approvals). Omitted means the adapter is used as is. */
-  wrapAdapter?: (npcId: string, adapter: NpcAdapter) => NpcAdapter;
+  wrapAdapter?: (npcId: string, adapter: NpcAdapter, sessionKey: string) => NpcAdapter;
+  attachments?: LiveMeetingAttachments;
 };
 
 /** `outcome`/`status` are optional — without them it is treated as a successful summary with no structured result. */
@@ -131,6 +135,7 @@ type MeetingSummary = {
 };
 
 export type MeetingBrokerLike = {
+  attachments?: LiveMeetingAttachments;
   discussionState?: MeetingDiscussionState;
   config: {
     participants: MeetingBrokerParticipant[];
@@ -193,6 +198,7 @@ type RegisterMeetingDiscussionHandlersArgs = {
   io: MeetingIo;
   socket: MeetingSocket;
   deps: {
+    createAttachments?: (input: MeetingAttachmentInput) => Promise<LiveMeetingAttachments | null>;
     activeBrokers: Map<string, MeetingBrokerLike>;
     discussionInitiators: Map<string, string>;
     meetingRooms: Map<string, MeetingRoom>;
@@ -385,7 +391,7 @@ export async function defaultCreateMeetingBroker(
     } else {
       resolved.push(
         config.wrapAdapter
-          ? { ...result, adapter: config.wrapAdapter(npc.id, result.adapter) }
+          ? { ...result, adapter: config.wrapAdapter(npc.id, result.adapter, result.sessionKey) }
           : result,
       );
     }
@@ -429,6 +435,7 @@ export async function defaultCreateMeetingBroker(
 
   const engine = new ConversationEngine(
     {
+      beforeTurn: config.attachments?.beforeTurn,
       mode: "meeting",
       topic: config.topic,
       participants: engineParticipants,
@@ -539,6 +546,7 @@ export function settleMeeting(
   channelId: string,
   opts: { stopBroker?: boolean; context: string },
 ): void {
+  state.activeBrokers.get(channelId)?.attachments?.stop();
   if (opts.stopBroker) state.activeBrokers.get(channelId)?.stop();
   state.activeBrokers.delete(channelId);
   state.discussionInitiators.delete(channelId);
@@ -689,6 +697,21 @@ export function registerMeetingDiscussionHandlers({
     const summarizerAdapter =
       "adapter" in summarizerResolution ? summarizerResolution.adapter : null;
 
+    const attachments = await deps.createAttachments?.({
+      channelId,
+      userId: user.userId,
+      isParticipant: (actorId) =>
+        [...(meetingRooms.get(channelId)?.participants ?? [])].some((id) =>
+          id === socket.id ? actorId === user.userId : players.get(id)?.userId === actorId,
+        ),
+      canControl: (actorId) => deps.canControlMeeting(channelId, actorId),
+      changed: (attachmentRequest) =>
+        io.to(getMeetingRoomId(channelId)).emit("meeting:mode-changed", {
+          mode: activeBrokers.get(channelId)?.discussionState?.mode ?? "auto",
+          by: user.userId,
+          attachmentRequest,
+        }),
+    });
     const brokerInstance = await createMeetingBroker(
       {
         topic,
@@ -704,12 +727,11 @@ export function registerMeetingDiscussionHandlers({
         },
         locale: meetingLocale,
         timeZone: meetingTimeZone,
-        ...(deps.wrapParticipantAdapter
-          ? {
-              wrapAdapter: (npcId: string, adapter: NpcAdapter) =>
-                deps.wrapParticipantAdapter!(channelId, npcId, adapter),
-            }
-          : {}),
+        attachments: attachments ?? undefined,
+        wrapAdapter: (npcId, adapter, sessionKey) => {
+          const wrapped = deps.wrapParticipantAdapter?.(channelId, npcId, adapter) ?? adapter;
+          return attachments?.wrap(npcId, wrapped, sessionKey) ?? wrapped;
+        },
       },
       {
         onPollStart: () => {
@@ -856,20 +878,27 @@ export function registerMeetingDiscussionHandlers({
           };
           // Have any one participant do the summary. The summary session key is separated from the meeting session so
           // the summary prompt doesn't mix into that NPC's meeting context.
-          if (summarizerAdapter) {
+          if (summarizerAdapter && (!attachments || attachments.ready)) {
             const summaryKey = `${brokerInstance.config.sessionKeyPrefix || sessionKeyPrefix}-summary-${
               brokerInstance.config.meetingId || meetingId
             }`;
-            summary = await generateMeetingSummary(
-              summarizerAdapter,
-              summaryKey,
-              topic,
-              transcript,
-              meetingParticipants
-                .filter((participant) => participant.type === "npc")
-                .map((participant) => ({ npcId: participant.id, name: participant.name })),
-              meetingLocale,
-            );
+            try {
+              summary = await generateMeetingSummary(
+                attachments?.wrap(candidateNpcs[0].id, summarizerAdapter, summaryKey) ??
+                  summarizerAdapter,
+                summaryKey,
+                topic,
+                transcript,
+                meetingParticipants
+                  .filter((participant) => participant.type === "npc")
+                  .map((participant) => ({ npcId: participant.id, name: participant.name })),
+                meetingLocale,
+              );
+            } catch {
+              summary = { ...summary, status: "failed" };
+            }
+          } else if (attachments && !attachments.ready) {
+            summary = { ...summary, status: "failed" };
           }
 
           if (activeBrokers.get(channelId) !== brokerInstance) return;
@@ -887,8 +916,10 @@ export function registerMeetingDiscussionHandlers({
             summaryStatus: summary.status ?? "ok",
           });
 
+          await attachments?.archive(minutesId);
           if (activeBrokers.get(channelId) !== brokerInstance) return;
           io.to(getMeetingRoomId(channelId)).emit("meeting:end", {
+            attachmentConversation: attachments?.conversation,
             transcript,
             keyTopics: summary.keyTopics,
             conclusions: summary.conclusions,
@@ -922,11 +953,14 @@ export function registerMeetingDiscussionHandlers({
       },
     );
 
+    brokerInstance.attachments = attachments ?? undefined;
+
     // If no NPC able to participate remains after adapter resolution (all unbound/unresolved), don't silently start
     // and immediately end an empty meeting; end it as a failure, same as the pre-start check. Exclusion reasons were
     // already announced individually by onParticipantsExcluded — this is a separate final signal that "so the meeting
     // itself did not start".
     if (brokerInstance.config.participants.length === 0) {
+      await attachments?.archive(null);
       if (deps.spatial && spatialGeneration !== null)
         deps.spatial.block(
           channelId,
@@ -986,13 +1020,25 @@ export function registerMeetingDiscussionHandlers({
       mode: settings?.initialMode || "auto",
       by: user.userId,
       initiatorId: user.userId,
+      attachmentConversation: attachments?.conversation,
       discussion: brokerInstance.discussionState,
     });
   });
 
-  socket.on("meeting:user-speak", (payload: unknown) => {
-    const { channelId, message } = (payload ?? {}) as { channelId?: string; message?: string };
-    if (!channelId || !message) return;
+  socket.on("meeting:user-speak", async (payload: unknown) => {
+    const data = (payload ?? {}) as {
+      channelId?: string;
+      message?: string;
+      attachmentIds?: unknown;
+      attachmentRequestId?: unknown;
+      attachmentConversation?: unknown;
+    };
+    const { channelId, message } = data;
+    if (!channelId || typeof message !== "string") return;
+    if (!meetingRooms.get(channelId)?.participants.has(socket.id)) {
+      socket.emit("meeting:error", { error: "forbidden" });
+      return;
+    }
 
     const broker = activeBrokers.get(channelId);
     if (!broker || !broker.isRunning()) return;
@@ -1000,13 +1046,23 @@ export function registerMeetingDiscussionHandlers({
     const player = players.get(socket.id);
     const userName = player?.characterName || user.nickname || "Unknown";
     const trimmed = String(message).trim().slice(0, 500);
-    if (!trimmed) return;
-
-    broker.addUserMessage(userName, trimmed);
+    let selected: ReturnType<typeof parseAttachmentSend> = null;
+    try {
+      if (data.attachmentIds !== undefined) {
+        if (!broker.attachments) throw new Error("attachment_feature_unavailable");
+        selected = parseAttachmentSend(data, broker.attachments.conversation);
+      }
+    } catch (error) {
+      socket.emit("meeting:error", {
+        error: error instanceof Error ? error.message : "attachment_prepare_failed",
+      });
+      return;
+    }
+    if (!trimmed && !selected) return;
 
     const room = meetingRooms.get(channelId);
     const userMessage: MeetingMessage = {
-      id: `msg-${Date.now()}-user`,
+      id: selected ? `attachment-message-${selected.requestId}` : `msg-${Date.now()}-user`,
       sender: userName,
       senderId: socket.id,
       senderType: "user",
@@ -1014,6 +1070,7 @@ export function registerMeetingDiscussionHandlers({
       timestamp: Date.now(),
     };
 
+    if (room?.messages.some((message) => message.id === userMessage.id)) return;
     if (room) {
       room.messages.push(userMessage);
       if (room.messages.length > 100) {
@@ -1021,7 +1078,16 @@ export function registerMeetingDiscussionHandlers({
       }
     }
 
-    io.to(getMeetingRoomId(channelId)).emit("meeting:message", userMessage);
+    io.to(getMeetingRoomId(channelId)).emit("meeting:message", {
+      ...userMessage,
+      ...(selected ? { attachmentIds: selected.fileIds } : {}),
+    });
+    if (selected && broker.attachments) {
+      void broker.attachments
+        .stage(user.userId, selected.requestId, selected.fileIds, userMessage.id)
+        .catch(() => socket.emit("meeting:error", { error: "attachment_prepare_failed" }));
+    }
+    broker.addUserMessage(userName, trimmed);
   });
 
   socket.on("meeting:stop", async (payload: unknown) => {

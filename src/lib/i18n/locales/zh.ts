@@ -1,5 +1,17 @@
 // Chinese (Simplified) translations
 const zh: Record<string, string> = {
+  "errors.attachment_not_found": "找不到原文件。",
+  "errors.attachment_too_large": "每个原文件不得超过5 MiB。",
+  "errors.attachment_count_exceeded": "每条消息最多选择3个文件。",
+  "errors.attachment_checksum_mismatch": "文件完整性检查失败。",
+  "errors.attachment_conflict": "附件请求已更改，请刷新后重试。",
+  "errors.attachment_backend_unsupported": "此运行环境不支持原文件。",
+  "errors.attachment_prepare_failed": "无法准备原文件，请重试或取消请求。",
+  "errors.attachment_quota_exceeded": "原文件存储空间已满。",
+  "errors.attachment_feature_unavailable": "请更新网关插件以使用原文件。",
+  "errors.attachment_invalid_file": "不支持此文件类型或名称。",
+  "errors.attachment_invalid_selection": "所选文件无效。",
+
   "attachments.exclude": "从会议中排除",
 
   "attachments.request.pending": "等待传输文件",

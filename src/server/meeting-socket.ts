@@ -1,3 +1,4 @@
+import { getMeetingAttachmentConversation } from "./meeting-attachment-runtime";
 import type { MeetingDiscussionState } from "../lib/meeting-discussion-state";
 import type { MeetingSpatialCoordinator } from "./meeting-spatial-coordinator";
 import { normalizeOfficeAppearance } from "@/game/three/office-appearance";
@@ -322,6 +323,7 @@ export function registerMeetingSocketHandlers({
         .filter(Boolean);
 
       socket.emit("meeting:state", {
+        attachmentConversation: getMeetingAttachmentConversation(channelId),
         participants: participantList,
         messages: room.messages.slice(-50),
         discussion: deps.getDiscussionState?.(channelId) ?? null,

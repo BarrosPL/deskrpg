@@ -1,6 +1,6 @@
 "use client";
-import { useRef } from "react";
-import { useAttachmentRequest } from "./use-attachment-request";
+import { useRef, useEffect } from "react";
+import { useAttachmentRequest, type AttachmentRequestView } from "./use-attachment-request";
 import ChatInput, { type ChatInputProps } from "../ChatInput";
 import { useT } from "@/lib/i18n";
 import type { ConversationRef } from "@/lib/conversation-attachments/types";
@@ -15,9 +15,11 @@ export default function ConversationChatInput({
   conversation,
   onSend,
   canControlAttachments = true,
+  attachmentRequest,
   ...props
 }: Omit<ChatInputProps, "onSend"> & {
   canControlAttachments?: boolean;
+  attachmentRequest?: AttachmentRequestView;
   channelId?: string;
   conversation?: ConversationRef;
   onSend: (
@@ -31,6 +33,10 @@ export default function ConversationChatInput({
   const input = useRef<HTMLInputElement>(null);
   const attachments = useConversationAttachments({ channelId, conversation });
   const execution = useAttachmentRequest(channelId, conversation, attachments.refresh);
+  const observeRequest = execution.observe;
+  useEffect(() => {
+    if (attachmentRequest) observeRequest(attachmentRequest);
+  }, [attachmentRequest, observeRequest]);
   return (
     <div>
       {conversation && (

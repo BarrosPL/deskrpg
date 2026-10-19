@@ -10,6 +10,8 @@ export function replaceExecute(adapter: NpcAdapter, execute: NpcAdapter["execute
     execute,
     testConnection: (config) => adapter.testConnection(config),
   };
+  if (adapter.ensureSession)
+    wrapped.ensureSession = (sessionKey) => adapter.ensureSession!(sessionKey);
   if (adapter.abort) wrapped.abort = (sessionKey) => adapter.abort!(sessionKey);
   if (adapter.steer) wrapped.steer = (text) => adapter.steer!(text);
   if (adapter.getSessionSummary)

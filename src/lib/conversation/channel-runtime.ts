@@ -106,6 +106,7 @@ export type EngineQuota = {
 };
 
 export type EngineConfig = {
+  beforeTurn?: (npcId: string, signal: AbortSignal) => Promise<void>;
   mode: ConversationMode;
   topic: string;
   participants: EngineParticipant[];
@@ -173,6 +174,7 @@ export class ChannelRuntime {
   /** Target for abortCurrentTurn — populated only while speak() is in progress. Matches
    * meeting-broker.js:_currentSessionKey/_currentAgentId. */
   private current: NpcRuntime | null = null;
+  private attachmentWait: AbortController | null = null;
 
   constructor(config: EngineConfig, callbacks: EngineCallbacks) {
     this.config = config;
@@ -284,6 +286,7 @@ export class ChannelRuntime {
   /** Requests an abort on the runtime currently holding the floor. In meeting policy this
    * pointer is always 0 or 1. Ported from meeting-broker.js:249-253. */
   abortCurrentTurn(): void {
+    this.attachmentWait?.abort();
     this.current?.abort();
   }
 
@@ -355,6 +358,19 @@ export class ChannelRuntime {
     for (const r of this.runtimes.values()) r.resetFailures();
 
     while (this.running && !this.isFinished()) {
+      if (this.config.beforeTurn) {
+        const controller = new AbortController();
+        this.attachmentWait = controller;
+        try {
+          await this.config.beforeTurn("", controller.signal);
+        } catch {
+          if (!this.running) break;
+          continue;
+        } finally {
+          this.attachmentWait = null;
+        }
+        if (!this.running) break;
+      }
       // 1. Drain the command queue (setMode)
       this.drainCommands();
 
@@ -555,6 +571,18 @@ export class ChannelRuntime {
 
   /** Grants the floor and receives the streamed response, recording it in the transcript. */
   private async speak(runtime: NpcRuntime): Promise<void> {
+    if (this.config.beforeTurn) {
+      const controller = new AbortController();
+      this.attachmentWait = controller;
+      try {
+        await this.config.beforeTurn(runtime.npcId, controller.signal);
+      } catch {
+        return;
+      } finally {
+        this.attachmentWait = null;
+      }
+      if (!this.running) return;
+    }
     this.callbacks.onTurnStart?.(runtime.npcId, runtime.displayName);
     this.current = runtime;
 

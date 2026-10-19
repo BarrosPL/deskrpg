@@ -37,18 +37,24 @@ export function useAttachmentRequest(
     )
       return;
     let cancelled = false;
+    let failures = 0;
     let timer: ReturnType<typeof setTimeout>;
     const poll = async () => {
       try {
         const response = await fetch(url(requestId));
         if (response.ok) {
+          failures = 0;
           const data = await response.json();
           if (!cancelled) {
             setRequest(data);
             void onChange();
           }
+        } else if (++failures >= 5 && !cancelled) {
+          setRequest({ requestId, state: "failed", errorCode: "attachment_prepare_failed" });
         }
       } catch {
+        if (++failures >= 5 && !cancelled)
+          setRequest({ requestId, state: "failed", errorCode: "attachment_prepare_failed" });
       } finally {
         if (!cancelled) timer = setTimeout(poll, 1500);
       }
@@ -93,9 +99,11 @@ export function useAttachmentRequest(
       setRequest({ ...request, errorCode: "attachment_prepare_failed" });
     }
   };
+  const observe = useCallback((view: AttachmentRequestView) => setRequest(view), []);
   return {
     request,
     start,
+    observe,
     retry: () => action("retry"),
     cancel: () => action("cancel"),
     exclude: (fileIds: string[]) => action("exclude", fileIds),

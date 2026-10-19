@@ -1,3 +1,7 @@
+import {
+  findContextByMinutes,
+  externalConversation,
+} from "@/lib/conversation-attachments/repository";
 import { db } from "@/db";
 import { meetingMinutes, channelMembers, channels } from "@/db";
 import { NextRequest, NextResponse } from "next/server";
@@ -60,7 +64,11 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ id: 
       .from(channels)
       .where(eq(channels.id, row.channelId))
       .limit(1);
+    const attachmentContext = await findContextByMinutes(id);
     return NextResponse.json({
+      attachmentConversation: attachmentContext
+        ? externalConversation(attachmentContext)
+        : undefined,
       minutes: normalizeMeetingMinutesRecord(row),
       // The server decides whether to draw the register and retry-summary buttons. The route blocks again with the same function.
       canManage: canManageMeetingMinutes({
