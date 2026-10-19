@@ -1,8 +1,9 @@
+const { ensureConversationAttachments } = require("./sqlite-conversation-attachments.js");
 // src/db/server-db.js
 // CommonJS Drizzle ORM wrapper for server.js (CJS land)
 // Supports PostgreSQL (default) and SQLite via DB_TYPE env var
 
-"use strict";
+("use strict");
 
 const fs = require("node:fs");
 const os = require("node:os");
@@ -381,6 +382,7 @@ function ensureSqliteCompatibility(sqlite) {
   ensureNpcPanelReads(sqlite);
   // users must exist first for the FK. Same order as index.ts.
   ensureConversationReads(sqlite);
+  ensureConversationAttachments(sqlite);
   // Moves the board table's PK to a surrogate key (existing DBs only) and creates the
   // project/subproject metadata tables. Must come after the board table, since the
   // rebuild has to happen first for the metadata tables' FKs to have a target.

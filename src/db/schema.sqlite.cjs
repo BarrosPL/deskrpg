@@ -782,7 +782,65 @@ const conversationReads = sqliteTable(
   (t) => [primaryKey({ columns: [t.userId, t.kind, t.targetId] })],
 );
 
+const conversationAttachmentContexts = sqliteTable(
+  "conversation_attachment_contexts",
+  {
+    id: text("id").primaryKey().notNull(),
+    kind: text("kind").notNull(),
+    scopeKey: text("scope_key").notNull(),
+    channelId: text("channel_id").references(() => channels.id, { onDelete: "set null" }),
+    gatewayId: text("gateway_id").references(() => gatewayResources.id, { onDelete: "set null" }),
+    sourceChannelId: text("source_channel_id").notNull(),
+    sourceGatewayId: text("source_gateway_id").notNull(),
+    ownerUserId: text("owner_user_id").notNull(),
+    npcId: text("npc_id"),
+    roomId: text("room_id"),
+    meetingMinutesId: text("meeting_minutes_id"),
+    revision: integer("revision").notNull(),
+    lifecycle: text("lifecycle").notNull(),
+    createdAt: text("created_at").notNull(),
+  },
+  (t) => [unique("conversation_attachment_contexts_scope_unique").on(t.scopeKey)],
+);
+
+const conversationAttachmentLinks = sqliteTable(
+  "conversation_attachment_links",
+  {
+    id: text("id").primaryKey().notNull(),
+    contextId: text("context_id").notNull(),
+    pluginFileId: text("plugin_file_id").notNull(),
+    uploaderId: text("uploader_id").notNull(),
+    messageId: text("message_id"),
+    name: text("name").notNull(),
+    mimeType: text("mime_type").notNull(),
+    bytes: integer("bytes").notNull(),
+    sha256: text("sha256").notNull(),
+    status: text("status").notNull(),
+    requestId: text("request_id").notNull(),
+    errorCode: text("error_code"),
+    createdAt: text("created_at").notNull(),
+    updatedAt: text("updated_at").notNull(),
+  },
+  (t) => [unique("conversation_attachment_links_scope_unique").on(t.contextId, t.requestId)],
+);
+
+const conversationAttachmentRequests = sqliteTable("conversation_attachment_requests", {
+  id: text("id").primaryKey().notNull(),
+  contextId: text("context_id").notNull(),
+  senderId: text("sender_id").notNull(),
+  revision: integer("revision").notNull(),
+  targetSnapshotJson: text("target_snapshot_json").notNull(),
+  selectedFileIdsJson: text("selected_file_ids_json").notNull(),
+  status: text("status").notNull(),
+  leaseStateJson: text("lease_state_json").notNull(),
+  createdAt: text("created_at").notNull(),
+  updatedAt: text("updated_at").notNull(),
+});
+
 module.exports = {
+  conversationAttachmentRequests,
+  conversationAttachmentLinks,
+  conversationAttachmentContexts,
   users,
   characters,
   groups,

@@ -707,3 +707,63 @@ export function createProfilePluginClient(
 
   return { profileName: input.profileName, cron, skills, mcp, approvals, sessions, askUser };
 }
+
+/** Original-file transport is separate from the automation contract. */
+export function createOwnerConversationFilesClient(input: TransportInput & { ownerToken: string }) {
+  const { call, callRaw } = createPluginTransport(input);
+  const root = "/deskrpg/conversation-files";
+  const file = (id: string) => `${root}/${encodeURIComponent(id)}`;
+  const token = input.ownerToken;
+  return {
+    upload: (conversationId: string, requestId: string, content: Blob, filename: string) => {
+      const formData = new FormData();
+      formData.append("conversationId", conversationId);
+      formData.append("requestId", requestId);
+      formData.append("file", content, filename);
+      return call<import("../conversation-attachments/types").FileMeta>(root, token, {
+        method: "POST",
+        formData,
+      });
+    },
+    content: (id: string) => callRaw(`${file(id)}/content`, token),
+    grant: (
+      id: string,
+      body: { conversationId: string; profileName: string; sessionId: string; sessionKey: string },
+    ) =>
+      call<{ grant: string; expiresAt: string }>(`${file(id)}/grant`, token, {
+        method: "POST",
+        body,
+      }),
+    link: (id: string, body: { conversationId: string; messageId: string }) =>
+      call<{ ok: true }>(`${file(id)}/link`, token, { method: "POST", body }),
+    remove: (id: string) =>
+      call<{ deleted: boolean; pending?: boolean }>(file(id), token, { method: "DELETE" }),
+    revoke: (body: { conversationId: string; profileName: string; sessionId: string }) =>
+      call<{ ok: true }>(`${root}/bindings/revoke`, token, { method: "POST", body }),
+  };
+}
+export function createProfileConversationFilesClient(
+  input: TransportInput & { profileName: string; profileToken: string },
+) {
+  const { call } = createPluginTransport(input);
+  const root = `/p/${encodeURIComponent(input.profileName)}/deskrpg/conversation-files`;
+  const token = input.profileToken;
+  return {
+    prepare: (body: { grant: string; requestId: string }) =>
+      call<import("../conversation-attachments/server-types").PreparedFile>(
+        `${root}/prepare`,
+        token,
+        { method: "POST", body },
+      ),
+    renew: (id: string, body: { sessionId: string; requestId: string }) =>
+      call<{ expiresAt: string }>(`${root}/leases/${encodeURIComponent(id)}/renew`, token, {
+        method: "POST",
+        body,
+      }),
+    release: (id: string, body: { sessionId: string; requestId: string }) =>
+      call<{ ok: true }>(`${root}/leases/${encodeURIComponent(id)}/release`, token, {
+        method: "POST",
+        body,
+      }),
+  };
+}

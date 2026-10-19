@@ -1,3 +1,5 @@
+// eslint-disable-next-line @typescript-eslint/no-require-imports
+const { ensureConversationAttachments } = require("./sqlite-conversation-attachments.js");
 // src/db/index.ts
 import { randomUUID } from "node:crypto";
 import * as pgSchema from "./schema";
@@ -481,6 +483,7 @@ export function ensureSqliteCompatibility(sqlite: BetterSqlite3.Database) {
   ensureNpcPanelReads(sqlite);
   // users must exist first for the FK. Same order as server-db.js.
   ensureConversationReads(sqlite);
+  ensureConversationAttachments(sqlite);
   // Moves the board table's PK to a surrogate key (existing DBs only) and creates the
   // project/subproject metadata tables. Must come after the board table, since the
   // rebuild has to happen first for the metadata tables' FKs to have a target.
@@ -567,3 +570,7 @@ export const db = new Proxy({} as DbInstance, {
 });
 
 export type DB = ReturnType<typeof getDb>;
+
+export const conversationAttachmentContexts = activeSchema.conversationAttachmentContexts;
+export const conversationAttachmentLinks = activeSchema.conversationAttachmentLinks;
+export const conversationAttachmentRequests = activeSchema.conversationAttachmentRequests;
