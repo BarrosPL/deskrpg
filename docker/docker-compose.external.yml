@@ -19,7 +19,7 @@ services:
     image: ${DESKRPG_IMAGE:-ghcr.io/dandacompany/deskrpg:latest}
     restart: unless-stopped
     volumes:
-      - public/assets:/app/public/assets
+      - ../public/assets:/app/public/assets
       - deskrpg-users:/var/deskrpg/users
       - deskrpg-workspaces:/var/deskrpg/workspaces
     # Pin the Hermes gateway running on the host (default 8642) by name.
